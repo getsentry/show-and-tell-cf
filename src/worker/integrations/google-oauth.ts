@@ -103,12 +103,7 @@ export async function verifyGoogleIdToken(
     throw new AuthenticationError('AUTH_INVALID', 'Google ID token is invalid', 401);
   }
 
-  if (
-    payload.aud !== config.clientId ||
-    payload.nonce !== expectedNonce ||
-    !isJsonString(payload.sub) ||
-    !payload.sub
-  ) {
+  if (payload.nonce !== expectedNonce || !isJsonString(payload.sub) || !payload.sub) {
     throw new AuthenticationError('AUTH_INVALID', 'Google ID token is invalid', 401);
   }
   if (payload.email_verified !== true || !isJsonString(payload.email)) {
