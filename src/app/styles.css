@@ -77,3 +77,171 @@ h1 {
   text-decoration: none;
   cursor: pointer;
 }
+.appShell {
+  min-height: 100vh;
+  background: #130f1c;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #392d4d;
+}
+.topbar .brand {
+  margin-right: auto;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.topbar form {
+  margin: 0;
+}
+.topbar button,
+.cardActions button {
+  border: 1px solid #66547d;
+  border-radius: 0.4rem;
+  color: #eee7f8;
+  background: transparent;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) 1fr;
+  min-height: calc(100vh - 4.5rem);
+}
+.eventRail {
+  padding: 2rem;
+  border-right: 1px solid #392d4d;
+}
+.eventButton {
+  display: grid;
+  width: 100%;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  padding: 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  color: #ddd4eb;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.eventButton span {
+  color: #9f93af;
+  font-size: 0.85rem;
+}
+.eventButton.active {
+  border-color: #7553ff;
+  background: rgb(117 83 255 / 14%);
+}
+.stackedForm,
+.submissionForm {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid #392d4d;
+}
+.stackedForm label,
+.submissionForm label {
+  display: grid;
+  gap: 0.4rem;
+  color: #c9bfd6;
+  font-size: 0.85rem;
+}
+input,
+textarea {
+  width: 100%;
+  padding: 0.7rem;
+  border: 1px solid #66547d;
+  border-radius: 0.4rem;
+  color: #fff;
+  background: #211a2d;
+}
+textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+.eventContent {
+  padding: clamp(2rem, 5vw, 5rem);
+}
+.eventHeader h1 {
+  margin: 0.3rem 0 1rem;
+  font-size: clamp(3rem, 7vw, 7rem);
+  line-height: 0.9;
+}
+.submissionForm {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 3rem 0;
+  padding: 2rem;
+  border: 1px solid #392d4d;
+  border-radius: 0.8rem;
+}
+.submissionForm h2,
+.submissionForm label:last-of-type {
+  grid-column: 1 / -1;
+}
+.submissionList {
+  display: grid;
+  gap: 1rem;
+}
+.submissionCard {
+  display: grid;
+  grid-template-columns: 3rem 1fr auto;
+  gap: 1.2rem;
+  padding: 1.5rem;
+  border: 1px solid #392d4d;
+  border-radius: 0.7rem;
+  background: #1b1525;
+}
+.submissionCard.hidden {
+  opacity: 0.58;
+}
+.submissionCard h2 {
+  margin: 0.2rem 0 0.75rem;
+}
+.submissionCard a {
+  color: #c7b5ff;
+}
+.position {
+  color: #7553ff;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+.cardActions {
+  display: flex;
+  align-items: start;
+  gap: 0.5rem;
+}
+.emptyState {
+  padding: 3rem;
+  border: 1px dashed #66547d;
+  border-radius: 0.7rem;
+  color: #9f93af;
+  text-align: center;
+}
+@media (max-width: 800px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .eventRail {
+    border-right: 0;
+    border-bottom: 1px solid #392d4d;
+  }
+  .submissionForm {
+    grid-template-columns: 1fr;
+  }
+  .submissionForm h2,
+  .submissionForm label:last-of-type {
+    grid-column: auto;
+  }
+  .submissionCard {
+    grid-template-columns: 2rem 1fr;
+  }
+  .cardActions {
+    grid-column: 2;
+  }
+}

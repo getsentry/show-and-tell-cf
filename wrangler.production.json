@@ -14,14 +14,14 @@
     {
       "binding": "DB",
       "database_name": "show-and-tell-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "872dd445-f761-48b8-a17b-70288f862548",
       "migrations_dir": "migrations"
     }
   ],
   "vars": {
-    "APP_ORIGIN": "https://showntell.sentry.new",
-    "GOOGLE_REDIRECT_URI": "https://showntell.sentry.new/api/auth/callback",
-    "GOOGLE_CLIENT_ID": "configure-me.apps.googleusercontent.com",
+    "APP_ORIGIN": "https://showandtell.sentry.new",
+    "GOOGLE_REDIRECT_URI": "https://showandtell.sentry.new/api/auth/callback",
+    "GOOGLE_CLIENT_ID": "931381634032-ekdlv1qv93lmhimm8l3l7kknvvd9sitk.apps.googleusercontent.com",
     "ALLOWED_EMAIL_DOMAIN": "sentry.io"
   },
   "observability": {"enabled": true}

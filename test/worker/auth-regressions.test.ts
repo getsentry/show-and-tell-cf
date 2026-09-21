@@ -14,6 +14,8 @@ import {synchronizeGoogleUser} from '../../src/worker/services/users';
 
 beforeEach(async () => {
   await env.DB.batch([
+    env.DB.prepare('DELETE FROM submissions'),
+    env.DB.prepare('DELETE FROM show_and_tell_events'),
     env.DB.prepare('DELETE FROM user_sessions'),
     env.DB.prepare('DELETE FROM oauth_login_attempts'),
     env.DB.prepare('DELETE FROM users'),
