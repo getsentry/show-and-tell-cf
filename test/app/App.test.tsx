@@ -229,6 +229,36 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
+  it('offers retry when a post-mutation refresh fails', async () => {
+    let detailLoads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events')
+          return Promise.resolve(jsonResponse({events: [october]}));
+        if (url.endsWith('/visibility') && init?.method === 'POST')
+          return Promise.resolve(new Response(null, {status: 204}));
+        if (url === '/api/events/october') {
+          detailLoads++;
+          if (detailLoads === 2)
+            return Promise.resolve(new Response(null, {status: 500}));
+          return Promise.resolve(jsonResponse(detailFor(october, [submission])));
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Hide'}));
+
+    expect(await screen.findByRole('button', {name: 'Retry'})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Retry'}));
+
+    expect(await screen.findByRole('button', {name: 'Hide'})).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('keeps the current playlist loading when an old mutation refreshes', async () => {
     const mutation = deferred<Response>();
     const novemberDetail = deferred<Response>();

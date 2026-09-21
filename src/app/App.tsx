@@ -69,14 +69,16 @@ function ShowAndTell({user}: {user: SessionUser}) {
     });
   }, [loadEvents]);
   const requestSelected = useCallback(
-    (eventId: string) => {
+    async (eventId: string) => {
       setFailedSelection(null);
       setError(null);
-      void loadSelected(eventId).catch((cause: Error) => {
+      try {
+        await loadSelected(eventId);
+      } catch (cause) {
         if (eventId !== selectedIdRef.current) return;
         setFailedSelection(eventId);
-        setError(cause.message);
-      });
+        setError(cause instanceof Error ? cause.message : 'Request failed');
+      }
     },
     [loadSelected],
   );
@@ -85,7 +87,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
       setSelected(null);
       return;
     }
-    requestSelected(selectedId);
+    void requestSelected(selectedId);
   }, [requestSelected, selectedId]);
 
   function reportFailure(operation: Promise<void>) {
@@ -122,13 +124,13 @@ function ShowAndTell({user}: {user: SessionUser}) {
       }),
     );
     form.reset();
-    await Promise.all([loadEvents(), loadSelected(selectedId)]);
+    await Promise.all([loadEvents(), requestSelected(selectedId)]);
   }
 
   async function removeSubmission(submissionId: string) {
     if (!selectedId) return;
     await api(`/events/${selectedId}/submissions/${submissionId}`, {method: 'DELETE'});
-    await Promise.all([loadEvents(), loadSelected(selectedId)]);
+    await Promise.all([loadEvents(), requestSelected(selectedId)]);
   }
 
   async function setHidden(submissionId: string, hidden: boolean) {
@@ -137,7 +139,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
       `/events/${selectedId}/submissions/${submissionId}/visibility`,
       json('POST', {hidden}),
     );
-    await Promise.all([loadEvents(), loadSelected(selectedId)]);
+    await Promise.all([loadEvents(), requestSelected(selectedId)]);
   }
 
   const visibleSelection = selected?.event.id === selectedId ? selected : null;
@@ -194,7 +196,12 @@ function ShowAndTell({user}: {user: SessionUser}) {
           ) : null}
         </aside>
         <section className="eventContent">
-          {visibleSelection ? (
+          {failedSelection === selectedId && selectedId ? (
+            <div className="emptyState">
+              <p>Could not load this playlist.</p>
+              <button onClick={() => requestSelected(selectedId)}>Retry</button>
+            </div>
+          ) : visibleSelection ? (
             <>
               <header className="eventHeader">
                 <p className="eyebrow">Company playlist</p>
@@ -269,11 +276,6 @@ function ShowAndTell({user}: {user: SessionUser}) {
                 ) : null}
               </div>
             </>
-          ) : failedSelection === selectedId && selectedId ? (
-            <div className="emptyState">
-              <p>Could not load this playlist.</p>
-              <button onClick={() => requestSelected(selectedId)}>Retry</button>
-            </div>
           ) : initialLoadFailed && !eventsLoaded ? null : selectedId || !eventsLoaded ? (
             <p className="emptyState">Loading playlist…</p>
           ) : (
