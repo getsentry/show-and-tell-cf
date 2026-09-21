@@ -104,6 +104,38 @@ describe('App', () => {
     expect(screen.queryByText('No Show & Tell playlists yet.')).not.toBeInTheDocument();
   });
 
+  it('offers a retry when playlist loading fails', async () => {
+    let attempts = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events')
+          return Promise.resolve(jsonResponse({events: [october]}));
+        if (url === '/api/events/october') {
+          attempts++;
+          return Promise.resolve(
+            attempts === 1
+              ? new Response(null, {status: 500})
+              : jsonResponse(detailFor(october)),
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText('Could not load this playlist.')).toBeInTheDocument();
+    expect(screen.queryByText('Loading playlist…')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Retry'}));
+
+    expect(
+      await screen.findByRole('heading', {name: 'October 2026'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('resets and refreshes the playlist form after creation', async () => {
     const created = deferred<Response>();
     let eventLoads = 0;

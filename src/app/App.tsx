@@ -33,12 +33,14 @@ function ShowAndTell({user}: {user: SessionUser}) {
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [initialLoadFailed, setInitialLoadFailed] = useState(false);
+  const [failedSelection, setFailedSelection] = useState<string | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const selectedRequests = useRef(new Map<string, number>());
 
   const selectEvent = useCallback((eventId: string | null) => {
     selectedIdRef.current = eventId;
     setSelectedId(eventId);
+    setFailedSelection(null);
     setError(null);
   }, []);
   const loadEvents = useCallback(async () => {
@@ -64,13 +66,25 @@ function ShowAndTell({user}: {user: SessionUser}) {
       setError(cause.message);
     });
   }, [loadEvents]);
+  const requestSelected = useCallback(
+    (eventId: string) => {
+      setFailedSelection(null);
+      setError(null);
+      void loadSelected(eventId).catch((cause: Error) => {
+        if (eventId !== selectedIdRef.current) return;
+        setFailedSelection(eventId);
+        setError(cause.message);
+      });
+    },
+    [loadSelected],
+  );
   useEffect(() => {
     if (!selectedId) {
       setSelected(null);
       return;
     }
-    void loadSelected(selectedId).catch((cause: Error) => setError(cause.message));
-  }, [loadSelected, selectedId]);
+    requestSelected(selectedId);
+  }, [requestSelected, selectedId]);
 
   function reportFailure(operation: Promise<void>) {
     setError(null);
@@ -253,6 +267,11 @@ function ShowAndTell({user}: {user: SessionUser}) {
                 ) : null}
               </div>
             </>
+          ) : failedSelection === selectedId && selectedId ? (
+            <div className="emptyState">
+              <p>Could not load this playlist.</p>
+              <button onClick={() => requestSelected(selectedId)}>Retry</button>
+            </div>
           ) : initialLoadFailed && !eventsLoaded ? null : selectedId || !eventsLoaded ? (
             <p className="emptyState">Loading playlist…</p>
           ) : (
