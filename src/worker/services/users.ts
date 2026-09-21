@@ -15,10 +15,6 @@ export async function synchronizeGoogleUser(
   identity: SessionIdentity,
 ): Promise<SessionUser> {
   const bySubject = await findBySubject(db, identity.subject);
-  if (bySubject && bySubject.email.toLowerCase() !== identity.email) {
-    throw new UserIdentityConflictError();
-  }
-
   const user = bySubject ?? (await findByEmail(db, identity.email));
   if (user) {
     if (user.google_subject !== null && user.google_subject !== identity.subject) {

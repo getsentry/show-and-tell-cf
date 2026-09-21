@@ -73,10 +73,10 @@ export function authenticateRequest<
       c.set('identity', session.identity);
       c.set('user', session.user);
       c.set('sessionTokenHash', session.tokenHash);
-      await next();
     } catch (error) {
       return authenticationErrorResponse(c, error);
     }
+    await next();
   });
 }
 

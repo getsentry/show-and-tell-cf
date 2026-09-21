@@ -4,6 +4,7 @@ import {isJsonObject, isJsonString, type JsonInput} from '../shared/json';
 
 export function App() {
   const [user, setUser] = useState<SessionUser | null | undefined>();
+  const authError = readAuthError();
   useEffect(() => {
     const controller = new AbortController();
     fetch('/api/session', {signal: controller.signal})
@@ -30,6 +31,11 @@ export function App() {
         <p className="eyebrow">Sentry internal</p>
         <h1>Show &amp; Tell</h1>
         <p className="lede">Sign in with your Sentry Google account to continue.</p>
+        {authError ? (
+          <p className="authError" role="alert">
+            {authError}
+          </p>
+        ) : null}
         <a className="primaryAction" href="/api/auth/login">
           Continue with Google
         </a>
@@ -49,6 +55,13 @@ export function App() {
       </form>
     </main>
   );
+}
+
+function readAuthError() {
+  const reason = new URLSearchParams(window.location.search).get('auth_error');
+  if (reason === 'forbidden') return 'Use a Sentry Google account to sign in.';
+  if (reason === 'failed') return 'Google sign-in failed. Please try again.';
+  return null;
 }
 
 function parseSession(value: JsonInput): SessionUser | null {
