@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "show-and-tell-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "872dd445-f761-48b8-a17b-70288f862548",
       "migrations_dir": "migrations"
     }
   ],
