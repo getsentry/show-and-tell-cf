@@ -292,6 +292,42 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps playlist content usable after an event-list refresh failure', async () => {
+    let eventLoads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events') {
+          eventLoads++;
+          return Promise.resolve(
+            eventLoads === 1
+              ? jsonResponse({events: [october, november]})
+              : new Response(null, {status: 502}),
+          );
+        }
+        if (url.endsWith('/visibility') && init?.method === 'POST')
+          return Promise.resolve(new Response(null, {status: 204}));
+        if (url === '/api/events/october')
+          return Promise.resolve(jsonResponse(detailFor(october, [submission])));
+        if (url === '/api/events/november')
+          return Promise.resolve(jsonResponse(detailFor(november)));
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Hide'}));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Request failed (502)');
+    expect(screen.getByRole('heading', {name: 'October 2026'})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: /November 2026/}));
+    expect(
+      await screen.findByRole('heading', {name: 'November 2026'}),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Retry'})).toBeInTheDocument();
+  });
+
   it('reports concurrent post-mutation refresh failures deterministically', async () => {
     let initialEvents = true;
     let initialDetail = true;
@@ -325,7 +361,7 @@ describe('App', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Request failed (502) · Request failed (503)',
     );
-    expect(screen.getByRole('button', {name: 'Retry'})).toBeInTheDocument();
+    expect(screen.getAllByRole('button', {name: 'Retry'})).toHaveLength(2);
   });
 
   it('offers retry when a post-mutation refresh fails', async () => {

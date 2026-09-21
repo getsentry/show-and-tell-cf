@@ -167,9 +167,12 @@ function ShowAndTell({user}: {user: SessionUser}) {
         </form>
       </header>
       {eventsError || selectionError || mutationError ? (
-        <p className="authError" role="alert">
-          {[eventsError, selectionError, mutationError].filter(Boolean).join(' · ')}
-        </p>
+        <div className="authError" role="alert">
+          <p>
+            {[eventsError, selectionError, mutationError].filter(Boolean).join(' · ')}
+          </p>
+          {eventsError ? <button onClick={() => void loadEvents()}>Retry</button> : null}
+        </div>
       ) : null}
       <div className="workspace">
         <aside className="eventRail">
@@ -205,12 +208,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
           ) : null}
         </aside>
         <section className="eventContent">
-          {eventsError ? (
-            <div className="emptyState">
-              <p>Could not refresh playlists.</p>
-              <button onClick={() => void loadEvents()}>Retry</button>
-            </div>
-          ) : failedSelection === selectedId && selectedId ? (
+          {failedSelection === selectedId && selectedId ? (
             <div className="emptyState">
               <p>Could not load this playlist.</p>
               <button onClick={() => requestSelected(selectedId)}>Retry</button>
@@ -290,7 +288,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
                 ) : null}
               </div>
             </>
-          ) : selectedId || !eventsLoaded ? (
+          ) : eventsError && !eventsLoaded ? null : selectedId || !eventsLoaded ? (
             <p className="emptyState">Loading playlist…</p>
           ) : (
             <p className="emptyState">No Show &amp; Tell playlists yet.</p>
