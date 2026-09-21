@@ -2,7 +2,7 @@ import {env} from 'cloudflare:test';
 import {Hono} from 'hono';
 import {beforeEach, describe, expect, it} from 'vitest';
 
-import app from '../../src/worker';
+import {app} from '../../src/worker';
 import type {AuthBindings, AuthVariables} from '../../src/worker/middleware/auth';
 import {
   authenticateRequest,

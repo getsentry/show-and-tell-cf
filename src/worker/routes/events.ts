@@ -101,7 +101,8 @@ eventRoutes.delete('/:eventId/submissions/:submissionId', async (c) => {
   )
     .bind(c.req.param('submissionId'), c.req.param('eventId'), user.id, user.role)
     .run();
-  if (result.meta.changes !== 1) return notFound(c);
+  // D1 includes the video-retirement trigger's updates in the change count.
+  if (result.meta.changes < 1) return notFound(c);
   return c.body(null, 204);
 });
 

@@ -1,7 +1,7 @@
 import {env} from 'cloudflare:test';
 import {beforeEach, describe, expect, it} from 'vitest';
 
-import app from '../../src/worker';
+import {app} from '../../src/worker';
 import {SESSION_COOKIE_NAME} from '../../src/worker/middleware/auth';
 import {createSession} from '../../src/worker/services/sessions';
 import {synchronizeGoogleUser} from '../../src/worker/services/users';

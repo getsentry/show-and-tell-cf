@@ -1,0 +1,5 @@
+# Only the processor belongs in the Docker build context (never OAuth secrets).
+**
+!Dockerfile.video-processor
+!processor/
+!processor/video-processor.mjs
