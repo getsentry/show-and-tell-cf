@@ -2,8 +2,13 @@ import {env} from 'cloudflare:test';
 import {Hono} from 'hono';
 import {beforeEach, describe, expect, it} from 'vitest';
 
+import app from '../../src/worker';
 import type {AuthBindings, AuthVariables} from '../../src/worker/middleware/auth';
-import {authenticateRequest, SESSION_COOKIE_NAME} from '../../src/worker/middleware/auth';
+import {
+  authenticateRequest,
+  OAUTH_STATE_COOKIE_NAME,
+  SESSION_COOKIE_NAME,
+} from '../../src/worker/middleware/auth';
 import {createSession} from '../../src/worker/services/sessions';
 import {synchronizeGoogleUser} from '../../src/worker/services/users';
 
@@ -16,6 +21,36 @@ beforeEach(async () => {
 });
 
 describe('authentication regressions', () => {
+  it('binds OAuth state to the browser that started login', async () => {
+    const login = await app.request('https://showntell.test/api/auth/login', {}, env);
+    const authorization = new URL(login.headers.get('Location')!);
+    const state = authorization.searchParams.get('state');
+    const stateCookie = login.headers.get('Set-Cookie');
+
+    expect(state).toHaveLength(43);
+    expect(stateCookie).toContain(`${OAUTH_STATE_COOKIE_NAME}=${state}`);
+    expect(stateCookie).toContain('HttpOnly');
+    expect(stateCookie).toContain('Secure');
+    expect(stateCookie).toContain('SameSite=Lax');
+
+    const unboundCallback = await app.request(
+      `https://showntell.test/api/auth/callback?code=attacker-code&state=${state}`,
+      {},
+      env,
+    );
+    expect(unboundCallback.headers.get('Location')).toBe('/?auth_error=failed');
+    expect(unboundCallback.headers.get('Set-Cookie')).toContain(
+      `${OAUTH_STATE_COOKIE_NAME}=; Max-Age=0`,
+    );
+
+    const wrongCookieCallback = await app.request(
+      `https://showntell.test/api/auth/callback?code=attacker-code&state=${state}`,
+      {headers: {Cookie: `${OAUTH_STATE_COOKIE_NAME}=wrong-browser-state`}},
+      env,
+    );
+    expect(wrongCookieCallback.headers.get('Location')).toBe('/?auth_error=failed');
+  });
+
   it('accepts a verified email change for an existing Google subject', async () => {
     const initial = await synchronizeGoogleUser(env.DB, {
       subject: 'google-user',

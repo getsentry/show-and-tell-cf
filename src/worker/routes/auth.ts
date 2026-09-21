@@ -7,8 +7,11 @@ import {
 import {
   assertRequestUsesConfiguredOrigin,
   AuthenticationError,
+  clearOauthStateCookie,
   clearSessionCookie,
+  oauthStateCookie,
   readAuthConfig,
+  readOauthStateCookie,
   sessionCookie,
   type AuthBindings,
   type AuthVariables,
@@ -51,6 +54,7 @@ authRoutes.get('/login', async (c) => {
         now,
       )
       .run();
+    c.header('Set-Cookie', oauthStateCookie(state, config, LOGIN_ATTEMPT_TTL_SECONDS));
     return c.redirect(googleAuthorizationUrl(config, {state, nonce, codeChallenge}));
   } catch (error) {
     return failure(
@@ -66,10 +70,14 @@ authRoutes.get('/callback', async (c) => {
     assertRequestUsesConfiguredOrigin(c.req.raw, config);
     const state = c.req.query('state');
     const code = c.req.query('code');
+    const browserState = readOauthStateCookie(c.req.header('Cookie'), config);
+    c.header('Set-Cookie', clearOauthStateCookie(config));
     if (
       c.req.query('error') ||
       !state ||
       !code ||
+      !browserState ||
+      browserState !== state ||
       state.length > 1024 ||
       code.length > 4096
     )
@@ -95,7 +103,7 @@ authRoutes.get('/callback', async (c) => {
     const identity = await verifyGoogleIdToken(c.env, config, idToken, attempt.nonce);
     const user = await synchronizeGoogleUser(c.env.DB, identity);
     const session = await createSession(c.env.DB, user.id, now);
-    c.header('Set-Cookie', sessionCookie(session.token, config));
+    c.header('Set-Cookie', sessionCookie(session.token, config), {append: true});
     return c.redirect('/');
   } catch (error) {
     return failure(

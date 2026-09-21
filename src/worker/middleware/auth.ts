@@ -9,6 +9,8 @@ import {
 
 export const SESSION_COOKIE_NAME = '__Host-sentry-showntell-session';
 export const LOCAL_SESSION_COOKIE_NAME = 'sentry-showntell-session';
+export const OAUTH_STATE_COOKIE_NAME = '__Host-sentry-showntell-oauth-state';
+export const LOCAL_OAUTH_STATE_COOKIE_NAME = 'sentry-showntell-oauth-state';
 
 export interface AuthVariables {
   identity: SessionIdentity;
@@ -154,6 +156,34 @@ export function sessionCookie(token: string, config: AuthConfig) {
 export function clearSessionCookie(config: AuthConfig) {
   const name = config.secureCookie ? SESSION_COOKIE_NAME : LOCAL_SESSION_COOKIE_NAME;
   return `${name}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${config.secureCookie ? '; Secure' : ''}`;
+}
+
+export function oauthStateCookie(
+  state: string,
+  config: AuthConfig,
+  maxAgeSeconds: number,
+) {
+  const name = config.secureCookie
+    ? OAUTH_STATE_COOKIE_NAME
+    : LOCAL_OAUTH_STATE_COOKIE_NAME;
+  return `${name}=${state}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; SameSite=Lax${config.secureCookie ? '; Secure' : ''}`;
+}
+
+export function clearOauthStateCookie(config: AuthConfig) {
+  const name = config.secureCookie
+    ? OAUTH_STATE_COOKIE_NAME
+    : LOCAL_OAUTH_STATE_COOKIE_NAME;
+  return `${name}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${config.secureCookie ? '; Secure' : ''}`;
+}
+
+export function readOauthStateCookie(
+  cookieHeader: string | undefined,
+  config: AuthConfig,
+) {
+  return readCookie(
+    cookieHeader,
+    config.secureCookie ? OAUTH_STATE_COOKIE_NAME : LOCAL_OAUTH_STATE_COOKIE_NAME,
+  );
 }
 
 function readAppOrigin(value: string | undefined) {
