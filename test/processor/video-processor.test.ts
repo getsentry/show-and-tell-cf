@@ -82,6 +82,51 @@ describe('video processor canonicalization', () => {
     expect(canonical.color_range).toBe('tv');
   }, 120_000);
 
+  it('preserves the full video when its audio track ends early', async () => {
+    const directory = await createTempDir();
+    const input = path.join(directory, 'short-audio.mp4');
+    const output = path.join(directory, 'canonical.mp4');
+    await run(ffmpegPath, [
+      '-hide_banner',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc=size=320x240:rate=30:duration=4',
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=1000:sample_rate=48000:duration=1',
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-c:a',
+      'aac',
+      input,
+    ]);
+    const processed = await run('node', [processorPath, 'process-file', input, output]);
+    const result = parseJsonObject(processed.stdout);
+    expect(result.audioMode).toBe('normalized');
+    const probed = await run(ffprobePath, [
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-show_entries',
+      'stream=duration,nb_frames',
+      '-of',
+      'json',
+      output,
+    ]);
+    const streams = parseJsonObject(probed.stdout).streams;
+    if (!Array.isArray(streams) || !isJsonObject(streams[0])) {
+      throw new Error('Expected canonical video stream');
+    }
+    expect(Number(streams[0].nb_frames)).toBe(120);
+    expect(Number(streams[0].duration)).toBeCloseTo(4, 1);
+  }, 120_000);
+
   it('generates an AAC silence track for silent video', async () => {
     const directory = await createTempDir();
     const input = path.join(directory, 'silent.mp4');

@@ -120,7 +120,9 @@ async function transcode(
   }
   args.push('-map', '0:v:0', '-map', normalizeAudio ? '0:a:0' : '1:a:0');
   args.push('-vf', SCALE_FILTER);
-  if (normalizeAudio) args.push('-af', loudnormFilter(firstPass));
+  // Pad real audio just like generated silence: -shortest must stop at video EOF,
+  // not at the end of a shorter source audio track.
+  if (normalizeAudio) args.push('-af', `${loudnormFilter(firstPass)},apad`);
   args.push(
     '-c:v',
     'libx264',
@@ -187,7 +189,7 @@ async function correctLoudness(
       '-c:v',
       'copy',
       '-af',
-      loudnormFilter(measured),
+      `${loudnormFilter(measured)},apad`,
       '-c:a',
       'aac',
       '-b:a',
