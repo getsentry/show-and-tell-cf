@@ -32,7 +32,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [initialLoadFailed, setInitialLoadFailed] = useState(false);
+  const [eventsLoadFailed, setEventsLoadFailed] = useState(false);
   const [failedSelection, setFailedSelection] = useState<string | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const eventsRequest = useRef(0);
@@ -48,11 +48,18 @@ function ShowAndTell({user}: {user: SessionUser}) {
   }, []);
   const loadEvents = useCallback(async () => {
     const request = ++eventsRequest.current;
-    const result = await api<EventsResponse>('/events');
-    if (request !== eventsRequest.current) return;
-    setEvents(result.events);
-    if (!selectedIdRef.current) selectEvent(result.events[0]?.id ?? null);
-    setEventsLoaded(true);
+    try {
+      const result = await api<EventsResponse>('/events');
+      if (request !== eventsRequest.current) return;
+      setEvents(result.events);
+      if (!selectedIdRef.current) selectEvent(result.events[0]?.id ?? null);
+      setEventsLoaded(true);
+      setEventsLoadFailed(false);
+    } catch (cause) {
+      if (request !== eventsRequest.current) return;
+      setEventsLoadFailed(true);
+      setError(cause instanceof Error ? cause.message : 'Request failed');
+    }
   }, [selectEvent]);
   const loadSelected = useCallback(async (eventId: string) => {
     const request = (selectedRequests.current.get(eventId) ?? 0) + 1;
@@ -66,10 +73,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
   }, []);
 
   useEffect(() => {
-    void loadEvents().catch((cause: Error) => {
-      setInitialLoadFailed(true);
-      setError(cause.message);
-    });
+    void loadEvents();
   }, [loadEvents]);
   const requestSelected = useCallback(
     async (eventId: string) => {
@@ -281,7 +285,12 @@ function ShowAndTell({user}: {user: SessionUser}) {
                 ) : null}
               </div>
             </>
-          ) : initialLoadFailed && !eventsLoaded ? null : selectedId || !eventsLoaded ? (
+          ) : eventsLoadFailed && !eventsLoaded ? (
+            <div className="emptyState">
+              <p>Could not load playlists.</p>
+              <button onClick={() => void loadEvents()}>Retry</button>
+            </div>
+          ) : selectedId || !eventsLoaded ? (
             <p className="emptyState">Loading playlist…</p>
           ) : (
             <p className="emptyState">No Show &amp; Tell playlists yet.</p>

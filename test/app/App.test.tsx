@@ -58,6 +58,43 @@ describe('App', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Request failed (500)');
     expect(screen.queryByText('Loading playlist…')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Retry'})).toBeInTheDocument();
+  });
+
+  it('recovers when the latest event-list request fails after a stale success', async () => {
+    const staleSuccess = deferred<Response>();
+    const latestFailure = deferred<Response>();
+    let eventLoads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events' && init?.method === 'POST')
+          return Promise.resolve(jsonResponse({event: october}));
+        if (url === '/api/events') {
+          eventLoads++;
+          if (eventLoads === 1) return staleSuccess.promise;
+          if (eventLoads === 2) return latestFailure.promise;
+          return Promise.resolve(jsonResponse({events: [october]}));
+        }
+        if (url === '/api/events/october')
+          return Promise.resolve(jsonResponse(detailFor(october)));
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+    fireEvent.submit(
+      (await screen.findByRole('button', {name: 'Create playlist'})).closest('form')!,
+    );
+    await act(async () => latestFailure.resolve(new Response(null, {status: 500})));
+    await act(async () => staleSuccess.resolve(jsonResponse({events: [october]})));
+
+    expect(await screen.findByRole('button', {name: 'Retry'})).toBeInTheDocument();
+    expect(screen.queryByText('Loading playlist…')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Retry'}));
+
+    expect(await screen.findByRole('button', {name: /October 2026/})).toBeInTheDocument();
   });
 
   it('reports mutation failures and preserves form input', async () => {
