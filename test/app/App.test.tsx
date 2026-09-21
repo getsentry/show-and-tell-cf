@@ -104,6 +104,28 @@ describe('App', () => {
     expect(screen.queryByText('No Show & Tell playlists yet.')).not.toBeInTheDocument();
   });
 
+  it('keeps retry available when the failed playlist is reselected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events')
+          return Promise.resolve(jsonResponse({events: [october]}));
+        if (url === '/api/events/october')
+          return Promise.resolve(new Response(null, {status: 500}));
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole('button', {name: 'Retry'})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: /October 2026/}));
+
+    expect(screen.getByRole('button', {name: 'Retry'})).toBeInTheDocument();
+    expect(screen.queryByText('Loading playlist…')).not.toBeInTheDocument();
+  });
+
   it('offers a retry when playlist loading fails', async () => {
     let attempts = 0;
     vi.stubGlobal(

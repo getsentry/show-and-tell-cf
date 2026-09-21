@@ -38,10 +38,12 @@ function ShowAndTell({user}: {user: SessionUser}) {
   const selectedRequests = useRef(new Map<string, number>());
 
   const selectEvent = useCallback((eventId: string | null) => {
+    if (eventId !== selectedIdRef.current) {
+      setFailedSelection(null);
+      setError(null);
+    }
     selectedIdRef.current = eventId;
     setSelectedId(eventId);
-    setFailedSelection(null);
-    setError(null);
   }, []);
   const loadEvents = useCallback(async () => {
     const result = await api<EventsResponse>('/events');
