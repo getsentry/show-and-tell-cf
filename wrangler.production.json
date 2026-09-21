@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "show-and-tell-cf",
+  "account_id": "20d94f53c7cab0b469521b703ff1923c",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-08-03",
+  "assets": {
+    "directory": "./dist/client",
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "observability": {"enabled": true}
+}
