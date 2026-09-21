@@ -32,12 +32,14 @@ function ShowAndTell({user}: {user: SessionUser}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [initialLoadFailed, setInitialLoadFailed] = useState(false);
   const selectedIdRef = useRef<string | null>(null);
   const selectedRequests = useRef(new Map<string, number>());
 
   const selectEvent = useCallback((eventId: string | null) => {
     selectedIdRef.current = eventId;
     setSelectedId(eventId);
+    setError(null);
   }, []);
   const loadEvents = useCallback(async () => {
     const result = await api<EventsResponse>('/events');
@@ -57,7 +59,10 @@ function ShowAndTell({user}: {user: SessionUser}) {
   }, []);
 
   useEffect(() => {
-    void loadEvents().catch((cause: Error) => setError(cause.message));
+    void loadEvents().catch((cause: Error) => {
+      setInitialLoadFailed(true);
+      setError(cause.message);
+    });
   }, [loadEvents]);
   useEffect(() => {
     if (!selectedId) {
@@ -248,7 +253,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
                 ) : null}
               </div>
             </>
-          ) : error ? null : selectedId || !eventsLoaded ? (
+          ) : initialLoadFailed && !eventsLoaded ? null : selectedId || !eventsLoaded ? (
             <p className="emptyState">Loading playlist…</p>
           ) : (
             <p className="emptyState">No Show &amp; Tell playlists yet.</p>

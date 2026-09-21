@@ -81,6 +81,7 @@ describe('App', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Request failed (500)');
     expect(title).toHaveValue('October 2026');
+    expect(screen.getByText('No Show & Tell playlists yet.')).toBeInTheDocument();
   });
 
   it('shows a loading state while the selected playlist is loading', async () => {
