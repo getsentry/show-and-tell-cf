@@ -21,7 +21,7 @@
   "vars": {
     "APP_ORIGIN": "https://showandtell.sentry.new",
     "GOOGLE_REDIRECT_URI": "https://showandtell.sentry.new/api/auth/callback",
-    "GOOGLE_CLIENT_ID": "configure-me.apps.googleusercontent.com",
+    "GOOGLE_CLIENT_ID": "931381634032-ekdlv1qv93lmhimm8l3l7kknvvd9sitk.apps.googleusercontent.com",
     "ALLOWED_EMAIL_DOMAIN": "sentry.io"
   },
   "observability": {"enabled": true}
