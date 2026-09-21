@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "show-and-tell-cf",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-08-03",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+  },
+  "observability": {"enabled": true},
+}
