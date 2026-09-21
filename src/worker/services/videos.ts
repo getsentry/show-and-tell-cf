@@ -254,6 +254,25 @@ export async function reapExpiredMultipartVideoUploads(
   return reaped;
 }
 
+/** Discover unfinished uploads even after a lost create response or on another device. */
+export async function getActiveVideoUpload(
+  db: D1Database,
+  submissionId: string,
+  user: SessionUser,
+): Promise<VideoUploadSession | null> {
+  await authorizeVideoWrite(db, submissionId, user);
+  const row = await db
+    .prepare(
+      `SELECT id, video_id, submission_id, creator_id, r2_upload_id, original_r2_key,
+      original_name, content_type, expected_size_bytes, part_size_bytes, status, expires_at
+     FROM video_uploads WHERE submission_id = ?
+       AND status IN ('creating', 'uploading', 'completing', 'expiring')`,
+    )
+    .bind(submissionId)
+    .first<UploadRow>();
+  return row ? mapUpload(db, row) : null;
+}
+
 export async function getVideoUpload(
   db: D1Database,
   bucket: R2Bucket,

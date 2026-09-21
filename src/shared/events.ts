@@ -13,7 +13,6 @@ export interface Submission {
   creatorName: string;
   title: string;
   description: string | null;
-  projectUrl: string;
   hidden: boolean;
   createdAt: string;
 }

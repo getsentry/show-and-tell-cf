@@ -22,6 +22,7 @@ import {
   getSubmissionVideo,
   getVideoContent,
   getVideoUpload,
+  getActiveVideoUpload,
   issuePlayback,
   authorizeVideoRead,
   authorizeVideoPlayback,
@@ -84,6 +85,19 @@ submissionVideoRoutes.get('/:submissionId/video', async (c) => {
       video: await getSubmissionVideo(c.env.DB, c.req.param('submissionId')),
     };
     return c.json(response, 200, {'Cache-Control': 'private, no-store'});
+  } catch (error) {
+    return respondError(c, error);
+  }
+});
+
+submissionVideoRoutes.get('/:submissionId/video/upload', async (c) => {
+  try {
+    const upload = await getActiveVideoUpload(
+      c.env.DB,
+      c.req.param('submissionId'),
+      c.get('user'),
+    );
+    return c.json({upload}, 200, {'Cache-Control': 'private, no-store'});
   } catch (error) {
     return respondError(c, error);
   }

@@ -65,6 +65,32 @@ async function userCookie(name: string) {
 }
 
 describe('R2 multipart video lifecycle', () => {
+  it('discovers active uploads for the owner or admin without exposing them to others', async () => {
+    const created = await createUpload(submissionId, ownerToken, 3);
+    const pending = await api(`/submissions/${submissionId}/video/upload`, ownerToken);
+    expect(pending.status).toBe(200);
+    expect(pending.body).toMatchObject({
+      upload: {uploadId: created.body.upload.uploadId, fileSize: 3},
+    });
+    expect(
+      (await api(`/submissions/${submissionId}/video/upload`, outsiderToken)).status,
+    ).toBe(403);
+    await env.DB.prepare('UPDATE users SET is_admin = 1 WHERE id != ?')
+      .bind(ownerId)
+      .run();
+    expect(
+      (await api(`/submissions/${submissionId}/video/upload`, outsiderToken)).status,
+    ).toBe(200);
+    await api(
+      `/submissions/${submissionId}/video/upload/${created.body.upload.uploadId}`,
+      ownerToken,
+      {method: 'DELETE'},
+    );
+    expect(
+      (await api(`/submissions/${submissionId}/video/upload`, ownerToken)).body,
+    ).toEqual({upload: null});
+  });
+
   it('cleans up expired uploads for deleted submissions on schedule', async () => {
     const created = await createUpload(submissionId, ownerToken, 3);
     const uploadId = created.body.upload.uploadId;
@@ -1066,7 +1092,7 @@ async function putPart(
 async function createSubmission(title: string) {
   const response = await api(`/events/${eventId}/submissions`, ownerToken, {
     method: 'POST',
-    body: {title, description: '', projectUrl: 'https://example.com'},
+    body: {title, description: ''},
   });
   expect(response.status, JSON.stringify(response.body)).toBe(201);
   return response.body.submission.id;

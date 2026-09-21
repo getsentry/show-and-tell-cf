@@ -64,7 +64,7 @@ eventRoutes.get('/:eventId', async (c) => {
   if (!event) return notFound(c);
   const result = await c.env.DB.prepare(
     `SELECT s.id, s.event_id, s.creator_id, u.display_name creator_name,
-      s.title, s.description, s.project_url, s.is_hidden, s.created_at
+      s.title, s.description, s.is_hidden, s.created_at
      FROM submissions s JOIN users u ON u.id = s.creator_id
      WHERE s.event_id = ? AND s.deleted_at IS NULL
        AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
@@ -82,12 +82,14 @@ eventRoutes.post('/:eventId/submissions', async (c) => {
     return notFound(c);
   const input = parseSubmission(await readJson(c.req.raw));
   const id = crypto.randomUUID();
+  // Keep the legacy NOT NULL column populated until a later cleanup migration.
+  // It is no longer read or exposed; retaining it keeps rolling deploys compatible.
   await c.env.DB.prepare(
     `INSERT INTO submissions
       (id, event_id, creator_id, title, description, project_url)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, '-')`,
   )
-    .bind(id, eventId, c.get('user').id, input.title, input.description, input.projectUrl)
+    .bind(id, eventId, c.get('user').id, input.title, input.description)
     .run();
   return c.json({submission: await getSubmission(c.env.DB, id)}, 201);
 });
@@ -138,7 +140,6 @@ interface SubmissionRow {
   creator_name: string;
   title: string;
   description: string | null;
-  project_url: string;
   is_hidden: number;
   created_at: string;
 }
@@ -162,7 +163,7 @@ async function getSubmission(db: D1Database, id: string) {
   const row = await db
     .prepare(
       `SELECT s.id, s.event_id, s.creator_id, u.display_name creator_name,
-      s.title, s.description, s.project_url, s.is_hidden, s.created_at
+      s.title, s.description, s.is_hidden, s.created_at
      FROM submissions s JOIN users u ON u.id = s.creator_id WHERE s.id = ?`,
     )
     .bind(id)
@@ -188,7 +189,6 @@ function toSubmission(row: SubmissionRow): Submission {
     creatorName: row.creator_name,
     title: row.title,
     description: row.description,
-    projectUrl: row.project_url,
     hidden: row.is_hidden === 1,
     createdAt: row.created_at,
   };
@@ -210,19 +210,9 @@ function parseEvent(value: JsonInput) {
 }
 function parseSubmission(value: JsonInput) {
   if (!isJsonObject(value)) throw new ValidationError('Submission must be an object');
-  const projectUrl = requiredText(value.projectUrl, 'Project URL', 2048);
-  let parsed: URL;
-  try {
-    parsed = new URL(projectUrl);
-  } catch {
-    throw new ValidationError('Project URL must be valid');
-  }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')
-    throw new ValidationError('Project URL must use HTTP or HTTPS');
   return {
     title: requiredText(value.title, 'Title', 120),
     description: optionalText(value.description, 'Description', 1000),
-    projectUrl: parsed.toString(),
   };
 }
 function parseVisibility(value: JsonInput) {

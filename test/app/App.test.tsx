@@ -47,6 +47,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events')
           return Promise.resolve(new Response(null, {status: 500}));
@@ -66,6 +70,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events') {
           attempts++;
@@ -94,6 +102,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events' && init?.method === 'POST')
           return Promise.resolve(jsonResponse({event: october}));
@@ -127,6 +139,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events' && init?.method === 'POST')
           return Promise.resolve(new Response(null, {status: 500}));
@@ -152,6 +168,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events')
           return Promise.resolve(jsonResponse({events: [october]}));
@@ -171,6 +191,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events')
           return Promise.resolve(jsonResponse({events: [october]}));
@@ -194,6 +218,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events')
           return Promise.resolve(jsonResponse({events: [october]}));
@@ -227,6 +255,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events' && init?.method === 'POST') return created.promise;
         if (url === '/api/events') {
@@ -260,6 +292,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events')
           return Promise.resolve(jsonResponse({events: [october]}));
@@ -276,10 +312,10 @@ describe('App', () => {
     );
 
     render(<App />);
-    const projectUrl = await screen.findByRole('textbox', {name: 'Project link'});
+    await screen.findByRole('form', {name: 'Create submission'});
+    expect(screen.queryByRole('textbox', {name: 'Project link'})).not.toBeInTheDocument();
     const title = screen.getAllByRole('textbox', {name: 'Title'})[1];
     fireEvent.change(title, {target: {value: 'Project demo'}});
-    fireEvent.change(projectUrl, {target: {value: 'https://example.com'}});
     fireEvent.submit(
       screen.getByRole('button', {name: 'Create submission'}).closest('form')!,
     );
@@ -290,6 +326,35 @@ describe('App', () => {
     expect(
       await screen.findByRole('heading', {name: 'Project demo'}),
     ).toBeInTheDocument();
+    expect(screen.getByRole('article', {name: 'Project demo'})).toHaveFocus();
+    expect(await screen.findByLabelText('Choose video')).toBeInTheDocument();
+  });
+
+  it('creates a title-only submission once while the request is pending', async () => {
+    const pending = deferred<Response>();
+    const fetcher = vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/session')
+        return Promise.resolve(jsonResponse({user: {...admin, role: 'member'}}));
+      if (url === '/api/events')
+        return Promise.resolve(jsonResponse({events: [october]}));
+      if (url === '/api/events/october')
+        return Promise.resolve(jsonResponse(detailFor(october)));
+      if (url.endsWith('/submissions') && init?.method === 'POST') return pending.promise;
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<App />);
+    const form = await screen.findByRole('form', {name: 'Create submission'});
+    fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Demo'}});
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    expect(screen.getByRole('button', {name: 'Saving…'})).toBeDisabled();
+    const posts = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect(posts).toHaveLength(1);
+    expect(posts[0][1]?.body).toBe(JSON.stringify({title: 'Demo', description: ''}));
+    await act(async () => pending.resolve(jsonResponse({submission})));
+    expect(screen.getByRole('button', {name: 'Create submission'})).toBeEnabled();
+    expect(screen.queryByRole('form', {name: 'Create playlist'})).not.toBeInTheDocument();
   });
 
   it('keeps playlist content usable after an event-list refresh failure', async () => {
@@ -297,6 +362,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events') {
           eventLoads++;
@@ -334,6 +403,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events') {
           if (initialEvents) {
@@ -369,6 +442,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events')
           return Promise.resolve(jsonResponse({events: [october]}));
@@ -400,6 +477,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events') {
           eventLoads++;
@@ -434,6 +515,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events')
           return Promise.resolve(jsonResponse({events: [october, november]}));
@@ -464,6 +549,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events')
           return Promise.resolve(jsonResponse({events: [october, november]}));
@@ -494,6 +583,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events')
           return Promise.resolve(jsonResponse({events: [october, november]}));
@@ -526,6 +619,10 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
         if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
         if (url === '/api/events')
           return Promise.resolve(jsonResponse({events: [october, november]}));
@@ -571,7 +668,6 @@ const submission = {
   creatorName: admin.displayName,
   title: 'Project demo',
   description: null,
-  projectUrl: 'https://example.com',
   hidden: false,
   createdAt: '2026-10-01T00:00:00.000Z',
 };

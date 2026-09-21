@@ -39,7 +39,7 @@ textarea {
 
 h1 {
   margin: 0;
-  max-width: 10ch;
+  max-width: 14ch;
   font-size: clamp(4rem, 13vw, 10rem);
   line-height: 0.85;
 }
@@ -170,11 +170,13 @@ textarea {
 }
 .eventHeader h1 {
   margin: 0.3rem 0 1rem;
-  font-size: clamp(3rem, 7vw, 7rem);
-  line-height: 0.9;
+  max-width: 24ch;
+  font-size: clamp(2rem, 4.5vw, 4.5rem);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
 }
 .submissionForm {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   margin: 3rem 0;
   padding: 2rem;
   border: 1px solid #392d4d;
@@ -190,7 +192,7 @@ textarea {
 }
 .submissionCard {
   display: grid;
-  grid-template-columns: 3rem 1fr auto;
+  grid-template-columns: 2rem minmax(0, 1fr);
   gap: 1.2rem;
   padding: 1.5rem;
   border: 1px solid #392d4d;
@@ -198,7 +200,8 @@ textarea {
   background: #1b1525;
 }
 .submissionCard.hidden {
-  opacity: 0.58;
+  border-style: dashed;
+  border-color: #8b739f;
 }
 .submissionCard h2 {
   margin: 0.2rem 0 0.75rem;
@@ -243,5 +246,166 @@ textarea {
   }
   .cardActions {
     grid-column: 2;
+  }
+}
+
+/* Hack Week's dark palette, with quieter forms and readable video cards. */
+:root {
+  color-scheme: dark;
+}
+button {
+  cursor: pointer;
+}
+button:not(.primaryAction):not(.eventButton) {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid #66547d;
+  border-radius: 0.4rem;
+  background: #241c33;
+  color: #f3eef8;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+button:not(:disabled):hover {
+  filter: brightness(1.18);
+}
+:focus-visible {
+  outline: 3px solid #c7b5ff;
+  outline-offset: 3px;
+}
+.formHint {
+  margin: 0;
+  color: #b3a7bf;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.submissionForm h2,
+.stackedForm h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.submissionBody {
+  min-width: 0;
+}
+.submissionBody h2,
+.submissionBody > p,
+.eventButton strong {
+  overflow-wrap: anywhere;
+}
+.submissionBody > p,
+.eventHeader > p {
+  white-space: pre-wrap;
+}
+.cardActions {
+  grid-column: 2;
+  flex-wrap: wrap;
+}
+.videoPanel {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #392d4d;
+}
+.videoPanel input[type='file'] {
+  margin-top: 0.65rem;
+  padding: 0.75rem;
+}
+.filePicker {
+  padding: 1rem;
+  border: 1px dashed #8b739f;
+  border-radius: 0.6rem;
+  background: #211a2d;
+}
+.filePicker input::file-selector-button {
+  padding: 0.5rem;
+  margin-right: 0.75rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: #c7b5ff;
+  color: #130f1c;
+  cursor: pointer;
+}
+.videoActions,
+.videoStatusRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.statusBadge {
+  width: fit-content;
+  border: 1px solid #8b739f;
+  border-radius: 2rem;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  background: #2a2140;
+}
+.statusBadge.ready {
+  color: #d4f59a;
+  border-color: #5f8a2a;
+  background: #1f2e12;
+}
+.statusBadge.failed {
+  color: #ffd7e2;
+  border-color: #e1567c;
+  background: #3b1c2c;
+}
+.fileName {
+  margin: 0;
+  color: #b3a7bf;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+.videoPreview {
+  width: 100%;
+  max-height: 32rem;
+  border-radius: 0.5rem;
+  background: #000;
+}
+progress {
+  width: 100%;
+  accent-color: #9b82ff;
+  height: 0.8rem;
+}
+.inlineError {
+  color: #ffd7e2;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.confirmAction {
+  padding: 1rem;
+  border: 1px solid #e1567c;
+  border-radius: 0.5rem;
+}
+.confirmAction p {
+  margin: 0 0 0.75rem;
+}
+.confirmAction button {
+  margin: 0 0.5rem 0.5rem 0;
+}
+.appShell > .authError {
+  margin: 1rem 2rem;
+}
+@media (max-width: 800px) {
+  .topbar {
+    padding: 1rem;
+    flex-wrap: wrap;
+  }
+  .topbar > span {
+    font-size: 0.8rem;
+  }
+  .eventContent,
+  .eventRail {
+    padding: 1.25rem;
+  }
+  .submissionForm {
+    margin: 1.5rem 0;
+    padding: 1.25rem;
+  }
+  .submissionCard {
+    padding: 1rem;
+    gap: 0.75rem;
   }
 }
