@@ -11,6 +11,7 @@
     "lint": "vp lint src test vite.config.ts vitest.config.ts --deny-warnings",
     "test": "npm run test:app && npm run test:worker",
     "verify": "npm run cf-typegen && npm run typecheck && npm run format:check && npm run lint && npm test && npm run build && npm run deploy:dry-run",
+    "deploy:production": "wrangler d1 migrations apply show-and-tell-db --remote --config wrangler.production.json && wrangler deploy --config wrangler.production.json",
     "deploy:dry-run": "wrangler deploy --dry-run --config wrangler.production.json --outdir .wrangler/deploy-dry-run",
     "build": "vp build",
     "preview": "vp preview",
