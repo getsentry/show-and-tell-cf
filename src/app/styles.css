@@ -56,3 +56,14 @@ h1 {
   border-radius: 999px;
   color: #c7b5ff;
 }
+.primaryAction {
+  width: fit-content;
+  padding: 0.9rem 1.25rem;
+  border: 0;
+  border-radius: 0.5rem;
+  color: #130f1c;
+  background: #f7f2ff;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}

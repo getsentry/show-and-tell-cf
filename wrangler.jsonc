@@ -8,5 +8,19 @@
     "binding": "ASSETS",
     "run_worker_first": true,
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "show-and-tell-db",
+      "database_id": "local",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "vars": {
+    "APP_ORIGIN": "http://localhost:5173",
+    "GOOGLE_REDIRECT_URI": "http://localhost:5173/api/auth/callback",
+    "GOOGLE_CLIENT_ID": "configure-me.apps.googleusercontent.com",
+    "ALLOWED_EMAIL_DOMAIN": "sentry.io",
+  },
   "observability": {"enabled": true},
 }
