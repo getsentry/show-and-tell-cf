@@ -488,6 +488,39 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
+  it('ignores a stale detail failure after a newer refresh succeeds', async () => {
+    const staleDetail = deferred<Response>();
+    let detailLoads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events')
+          return Promise.resolve(jsonResponse({events: [october, november]}));
+        if (url === '/api/events/october') {
+          detailLoads++;
+          if (detailLoads === 1) return staleDetail.promise;
+          return Promise.resolve(jsonResponse(detailFor(october, [submission])));
+        }
+        if (url === '/api/events/november')
+          return Promise.resolve(jsonResponse(detailFor(november)));
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: /November 2026/}));
+    fireEvent.click(screen.getByRole('button', {name: /October 2026/}));
+    expect(
+      await screen.findByRole('heading', {name: 'Project demo'}),
+    ).toBeInTheDocument();
+
+    await act(async () => staleDetail.resolve(new Response(null, {status: 500})));
+
+    expect(screen.getByRole('heading', {name: 'Project demo'})).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('ignores a stale playlist response after switching playlists', async () => {
     const octoberDetail = deferred<Response>();
     vi.stubGlobal(

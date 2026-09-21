@@ -61,36 +61,34 @@ function ShowAndTell({user}: {user: SessionUser}) {
       setEventsError(cause instanceof Error ? cause.message : 'Request failed');
     }
   }, [selectEvent]);
-  const loadSelected = useCallback(async (eventId: string) => {
-    const request = (selectedRequests.current.get(eventId) ?? 0) + 1;
-    selectedRequests.current.set(eventId, request);
-    const result = await api<EventResponse>(`/events/${eventId}`);
-    if (
-      request === selectedRequests.current.get(eventId) &&
-      eventId === selectedIdRef.current
-    )
-      setSelected(result);
-  }, []);
-
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
-  const requestSelected = useCallback(
-    async (eventId: string) => {
-      if (eventId === selectedIdRef.current) {
-        setFailedSelection(null);
-        setSelectionError(null);
-      }
-      try {
-        await loadSelected(eventId);
-      } catch (cause) {
-        if (eventId !== selectedIdRef.current) return;
-        setFailedSelection(eventId);
-        setSelectionError(cause instanceof Error ? cause.message : 'Request failed');
-      }
-    },
-    [loadSelected],
-  );
+  const requestSelected = useCallback(async (eventId: string) => {
+    const request = (selectedRequests.current.get(eventId) ?? 0) + 1;
+    selectedRequests.current.set(eventId, request);
+    if (eventId === selectedIdRef.current) {
+      setFailedSelection(null);
+      setSelectionError(null);
+    }
+    try {
+      const result = await api<EventResponse>(`/events/${eventId}`);
+      if (
+        request !== selectedRequests.current.get(eventId) ||
+        eventId !== selectedIdRef.current
+      )
+        return;
+      setSelected(result);
+    } catch (cause) {
+      if (
+        request !== selectedRequests.current.get(eventId) ||
+        eventId !== selectedIdRef.current
+      )
+        return;
+      setFailedSelection(eventId);
+      setSelectionError(cause instanceof Error ? cause.message : 'Request failed');
+    }
+  }, []);
   useEffect(() => {
     if (!selectedId) {
       setSelected(null);

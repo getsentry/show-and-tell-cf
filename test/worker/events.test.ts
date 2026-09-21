@@ -132,6 +132,9 @@ describe('events and submissions', () => {
     expect(await otherList.json()).toMatchObject({
       events: [{id: eventId, submissionCount: 0}],
     });
+    await expect(
+      env.DB.prepare('DELETE FROM users WHERE id = ?').bind(owner.id).run(),
+    ).rejects.toThrow();
 
     expect(
       (
