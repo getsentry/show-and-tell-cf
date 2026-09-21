@@ -32,18 +32,28 @@ function ShowAndTell({user}: {user: SessionUser}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const selectedRequest = useRef(0);
+  const selectedIdRef = useRef<string | null>(null);
+  const selectedRequests = useRef(new Map<string, number>());
 
+  const selectEvent = useCallback((eventId: string | null) => {
+    selectedIdRef.current = eventId;
+    setSelectedId(eventId);
+  }, []);
   const loadEvents = useCallback(async () => {
     const result = await api<EventsResponse>('/events');
     setEvents(result.events);
-    setSelectedId((current) => current ?? result.events[0]?.id ?? null);
+    if (!selectedIdRef.current) selectEvent(result.events[0]?.id ?? null);
     setEventsLoaded(true);
-  }, []);
+  }, [selectEvent]);
   const loadSelected = useCallback(async (eventId: string) => {
-    const request = ++selectedRequest.current;
+    const request = (selectedRequests.current.get(eventId) ?? 0) + 1;
+    selectedRequests.current.set(eventId, request);
     const result = await api<EventResponse>(`/events/${eventId}`);
-    if (request === selectedRequest.current) setSelected(result);
+    if (
+      request === selectedRequests.current.get(eventId) &&
+      eventId === selectedIdRef.current
+    )
+      setSelected(result);
   }, []);
 
   useEffect(() => {
@@ -51,7 +61,6 @@ function ShowAndTell({user}: {user: SessionUser}) {
   }, [loadEvents]);
   useEffect(() => {
     if (!selectedId) {
-      selectedRequest.current++;
       setSelected(null);
       return;
     }
@@ -132,7 +141,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
             <button
               className={event.id === selectedId ? 'eventButton active' : 'eventButton'}
               key={event.id}
-              onClick={() => setSelectedId(event.id)}
+              onClick={() => selectEvent(event.id)}
             >
               <strong>{event.title}</strong>
               <span>{event.submissionCount} submissions</span>

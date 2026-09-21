@@ -134,6 +134,36 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps the current playlist loading when an old mutation refreshes', async () => {
+    const mutation = deferred<Response>();
+    const novemberDetail = deferred<Response>();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events')
+          return Promise.resolve(jsonResponse({events: [october, november]}));
+        if (url.endsWith('/visibility') && init?.method === 'POST')
+          return mutation.promise;
+        if (url === '/api/events/october')
+          return Promise.resolve(jsonResponse(detailFor(october, [submission])));
+        if (url === '/api/events/november') return novemberDetail.promise;
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Hide'}));
+    fireEvent.click(screen.getByRole('button', {name: /November 2026/}));
+
+    await act(async () => mutation.resolve(new Response(null, {status: 204})));
+    await act(async () => novemberDetail.resolve(jsonResponse(detailFor(november))));
+
+    expect(
+      await screen.findByRole('heading', {name: 'November 2026'}),
+    ).toBeInTheDocument();
+  });
+
   it('ignores a stale playlist response after switching playlists', async () => {
     const octoberDetail = deferred<Response>();
     vi.stubGlobal(
