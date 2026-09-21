@@ -14,7 +14,7 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:5173`. The Worker health endpoint is available at `/api/health`.
+Copy `.dev.vars.example` to `.dev.vars`, add the local Google OAuth client secret, and allow the exact callback `http://localhost:5173/api/auth/callback`. Then open `http://localhost:5173`. The Worker health endpoint is available at `/api/health`.
 
 ## Production
 
@@ -25,7 +25,7 @@ The environment requires these GitHub Actions secrets:
 - `CLOUDFLARE_ACCOUNT_ID`: Sentry's internal Cloudflare account ID.
 - `CLOUDFLARE_API_TOKEN`: an account-scoped token with permission to deploy Workers.
 
-The custom domain and application resources will be connected after the initial foundation lands.
+Before deployment, replace the D1 ID and Google client ID placeholders in `wrangler.production.json`, add `GOOGLE_CLIENT_SECRET` with `wrangler secret put`, and create the OAuth web client with origin `https://showntell.sentry.new` and callback `https://showntell.sentry.new/api/auth/callback`. D1 is the role authority; promote initial admins after their first login with an explicit `users.is_admin` update.
 
 ## Quality gates
 
@@ -35,3 +35,5 @@ npm audit --omit=dev --audit-level=high
 ```
 
 The verification gate generates Cloudflare binding types, typechecks, checks formatting and lint, runs tests, builds the application, and performs a credential-free deployment dry run.
+
+Google OAuth uses Authorization Code with PKCE, state and nonce verification, exact verified `@sentry.io` enforcement, hashed opaque D1 sessions, and HttpOnly cookies. Authenticated mutations require the exact same-origin `Origin` header.

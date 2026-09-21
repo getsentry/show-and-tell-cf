@@ -10,5 +10,19 @@
     "binding": "ASSETS",
     "run_worker_first": true
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "show-and-tell-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "APP_ORIGIN": "https://showntell.sentry.new",
+    "GOOGLE_REDIRECT_URI": "https://showntell.sentry.new/api/auth/callback",
+    "GOOGLE_CLIENT_ID": "configure-me.apps.googleusercontent.com",
+    "ALLOWED_EMAIL_DOMAIN": "sentry.io"
+  },
   "observability": {"enabled": true}
 }
