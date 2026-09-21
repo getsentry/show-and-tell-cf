@@ -36,6 +36,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
   const [failedSelection, setFailedSelection] = useState<string | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const eventsRequest = useRef(0);
+  const eventsLoadFailedRef = useRef(false);
   const selectedRequests = useRef(new Map<string, number>());
 
   const selectEvent = useCallback((eventId: string | null) => {
@@ -55,8 +56,11 @@ function ShowAndTell({user}: {user: SessionUser}) {
       if (!selectedIdRef.current) selectEvent(result.events[0]?.id ?? null);
       setEventsLoaded(true);
       setEventsLoadFailed(false);
+      if (eventsLoadFailedRef.current) setError(null);
+      eventsLoadFailedRef.current = false;
     } catch (cause) {
       if (request !== eventsRequest.current) return;
+      eventsLoadFailedRef.current = true;
       setEventsLoadFailed(true);
       setError(cause instanceof Error ? cause.message : 'Request failed');
     }

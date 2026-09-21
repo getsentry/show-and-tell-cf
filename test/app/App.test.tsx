@@ -61,6 +61,32 @@ describe('App', () => {
     expect(screen.getByRole('button', {name: 'Retry'})).toBeInTheDocument();
   });
 
+  it('clears the error when a playlists retry returns an empty list', async () => {
+    let attempts = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events') {
+          attempts++;
+          return Promise.resolve(
+            attempts === 1
+              ? new Response(null, {status: 500})
+              : jsonResponse({events: []}),
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Retry'}));
+
+    expect(await screen.findByText('No Show & Tell playlists yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Retry'})).not.toBeInTheDocument();
+  });
+
   it('recovers when the latest event-list request fails after a stale success', async () => {
     const staleSuccess = deferred<Response>();
     const latestFailure = deferred<Response>();
