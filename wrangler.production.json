@@ -22,7 +22,51 @@
     "APP_ORIGIN": "https://showandtell.sentry.new",
     "GOOGLE_REDIRECT_URI": "https://showandtell.sentry.new/api/auth/callback",
     "GOOGLE_CLIENT_ID": "931381634032-ekdlv1qv93lmhimm8l3l7kknvvd9sitk.apps.googleusercontent.com",
-    "ALLOWED_EMAIL_DOMAIN": "sentry.io"
+    "ALLOWED_EMAIL_DOMAIN": "sentry.io",
+    "VIDEO_PROCESSOR_CONCURRENCY": "1",
+    "VIDEO_PROCESSING_AUTOSTART": "true"
   },
-  "observability": {"enabled": true}
+  "observability": {
+    "enabled": true
+  },
+  "r2_buckets": [
+    {
+      "binding": "VIDEOS",
+      "bucket_name": "show-and-tell-videos-production"
+    }
+  ],
+  "workflows": [
+    {
+      "binding": "VIDEO_PROCESSING_WORKFLOW",
+      "name": "show-and-tell-video-processing-production",
+      "class_name": "VideoProcessingWorkflow"
+    }
+  ],
+  "containers": [
+    {
+      "name": "show-and-tell-video-processor-production",
+      "class_name": "VideoProcessorContainer",
+      "image": "./Dockerfile.video-processor",
+      "image_build_context": ".",
+      "max_instances": 2,
+      "instance_type": "standard-2"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "VIDEO_PROCESSOR",
+        "class_name": "VideoProcessorContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "video-processor-v1",
+      "new_sqlite_classes": ["VideoProcessorContainer"]
+    }
+  ],
+  "triggers": {
+    "crons": ["17 * * * *"]
+  }
 }

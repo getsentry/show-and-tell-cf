@@ -21,6 +21,50 @@
     "GOOGLE_REDIRECT_URI": "http://localhost:5173/api/auth/callback",
     "GOOGLE_CLIENT_ID": "configure-me.apps.googleusercontent.com",
     "ALLOWED_EMAIL_DOMAIN": "sentry.io",
+    "VIDEO_PROCESSOR_CONCURRENCY": "1",
+    "VIDEO_PROCESSING_AUTOSTART": "true",
   },
-  "observability": {"enabled": true},
+  "observability": {
+    "enabled": true,
+  },
+  "r2_buckets": [
+    {
+      "binding": "VIDEOS",
+      "bucket_name": "show-and-tell-videos-local",
+    },
+  ],
+  "workflows": [
+    {
+      "binding": "VIDEO_PROCESSING_WORKFLOW",
+      "name": "show-and-tell-video-processing-local",
+      "class_name": "VideoProcessingWorkflow",
+    },
+  ],
+  "containers": [
+    {
+      "name": "show-and-tell-video-processor-local",
+      "class_name": "VideoProcessorContainer",
+      "image": "./Dockerfile.video-processor",
+      "image_build_context": ".",
+      "max_instances": 1,
+      "instance_type": "standard-2",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "VIDEO_PROCESSOR",
+        "class_name": "VideoProcessorContainer",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "video-processor-v1",
+      "new_sqlite_classes": ["VideoProcessorContainer"],
+    },
+  ],
+  "triggers": {
+    "crons": ["17 * * * *"],
+  },
 }

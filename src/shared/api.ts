@@ -2,7 +2,12 @@ export type ApiErrorCode =
   | 'AUTH_REQUIRED'
   | 'AUTH_INVALID'
   | 'AUTH_FORBIDDEN'
-  | 'AUTH_CONFIG_INVALID';
+  | 'AUTH_CONFIG_INVALID'
+  | 'VALIDATION_FAILED'
+  | 'NOT_FOUND'
+  | 'CONFLICT'
+  | 'STORAGE_FAILED'
+  | 'SERVICE_UNAVAILABLE';
 export interface ApiErrorResponse {
   error: {code: ApiErrorCode; message: string};
 }

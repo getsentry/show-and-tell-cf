@@ -20,6 +20,7 @@ export default defineConfig({
           GOOGLE_CLIENT_SECRET: 'test-client-secret',
           GOOGLE_REDIRECT_URI: 'https://showntell.test/api/auth/callback',
           ALLOWED_EMAIL_DOMAIN: 'sentry.io',
+          VIDEO_PROCESSING_AUTOSTART: 'false',
         },
       },
     })),
