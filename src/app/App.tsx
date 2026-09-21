@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react';
 
 import type {SessionUser} from '../shared/api';
 import type {EventResponse, EventsResponse, ShowAndTellEvent} from '../shared/events';
@@ -28,30 +28,40 @@ export function App() {
 
 function ShowAndTell({user}: {user: SessionUser}) {
   const [events, setEvents] = useState<ShowAndTellEvent[]>([]);
+  const [eventsLoaded, setEventsLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const selectedRequest = useRef(0);
 
   const loadEvents = useCallback(async () => {
     const result = await api<EventsResponse>('/events');
     setEvents(result.events);
     setSelectedId((current) => current ?? result.events[0]?.id ?? null);
+    setEventsLoaded(true);
   }, []);
-  const loadSelected = useCallback(async () => {
-    if (!selectedId) return setSelected(null);
-    setSelected(await api<EventResponse>(`/events/${selectedId}`));
-  }, [selectedId]);
+  const loadSelected = useCallback(async (eventId: string) => {
+    const request = ++selectedRequest.current;
+    const result = await api<EventResponse>(`/events/${eventId}`);
+    if (request === selectedRequest.current) setSelected(result);
+  }, []);
 
   useEffect(() => {
     void loadEvents().catch((cause: Error) => setError(cause.message));
   }, [loadEvents]);
   useEffect(() => {
-    void loadSelected().catch((cause: Error) => setError(cause.message));
-  }, [loadSelected]);
+    if (!selectedId) {
+      selectedRequest.current++;
+      setSelected(null);
+      return;
+    }
+    void loadSelected(selectedId).catch((cause: Error) => setError(cause.message));
+  }, [loadSelected, selectedId]);
 
   async function createEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     await api(
       '/events',
       json('POST', {
@@ -59,14 +69,15 @@ function ShowAndTell({user}: {user: SessionUser}) {
         description: data.get('description'),
       }),
     );
-    event.currentTarget.reset();
+    form.reset();
     await loadEvents();
   }
 
   async function createSubmission(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedId) return;
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     await api(
       `/events/${selectedId}/submissions`,
       json('POST', {
@@ -75,14 +86,14 @@ function ShowAndTell({user}: {user: SessionUser}) {
         projectUrl: data.get('projectUrl'),
       }),
     );
-    event.currentTarget.reset();
-    await Promise.all([loadEvents(), loadSelected()]);
+    form.reset();
+    await Promise.all([loadEvents(), loadSelected(selectedId)]);
   }
 
   async function removeSubmission(submissionId: string) {
     if (!selectedId) return;
     await api(`/events/${selectedId}/submissions/${submissionId}`, {method: 'DELETE'});
-    await Promise.all([loadEvents(), loadSelected()]);
+    await Promise.all([loadEvents(), loadSelected(selectedId)]);
   }
 
   async function setHidden(submissionId: string, hidden: boolean) {
@@ -91,8 +102,10 @@ function ShowAndTell({user}: {user: SessionUser}) {
       `/events/${selectedId}/submissions/${submissionId}/visibility`,
       json('POST', {hidden}),
     );
-    await Promise.all([loadEvents(), loadSelected()]);
+    await Promise.all([loadEvents(), loadSelected(selectedId)]);
   }
+
+  const visibleSelection = selected?.event.id === selectedId ? selected : null;
 
   return (
     <main className="appShell">
@@ -143,12 +156,14 @@ function ShowAndTell({user}: {user: SessionUser}) {
           ) : null}
         </aside>
         <section className="eventContent">
-          {selected ? (
+          {visibleSelection ? (
             <>
               <header className="eventHeader">
                 <p className="eyebrow">Company playlist</p>
-                <h1>{selected.event.title}</h1>
-                {selected.event.description ? <p>{selected.event.description}</p> : null}
+                <h1>{visibleSelection.event.title}</h1>
+                {visibleSelection.event.description ? (
+                  <p>{visibleSelection.event.description}</p>
+                ) : null}
               </header>
               <form
                 className="submissionForm"
@@ -172,7 +187,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
                 </button>
               </form>
               <div className="submissionList">
-                {selected.submissions.map((submission, index) => (
+                {visibleSelection.submissions.map((submission, index) => (
                   <article
                     className={
                       submission.hidden ? 'submissionCard hidden' : 'submissionCard'
@@ -209,11 +224,13 @@ function ShowAndTell({user}: {user: SessionUser}) {
                     </div>
                   </article>
                 ))}
-                {!selected.submissions.length ? (
+                {!visibleSelection.submissions.length ? (
                   <p className="emptyState">No projects yet. Somebody has to go first.</p>
                 ) : null}
               </div>
             </>
+          ) : selectedId || !eventsLoaded ? (
+            <p className="emptyState">Loading playlist…</p>
           ) : (
             <p className="emptyState">No Show &amp; Tell playlists yet.</p>
           )}
