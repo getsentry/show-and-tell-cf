@@ -19,8 +19,8 @@
     }
   ],
   "vars": {
-    "APP_ORIGIN": "https://showntell.sentry.new",
-    "GOOGLE_REDIRECT_URI": "https://showntell.sentry.new/api/auth/callback",
+    "APP_ORIGIN": "https://showandtell.sentry.new",
+    "GOOGLE_REDIRECT_URI": "https://showandtell.sentry.new/api/auth/callback",
     "GOOGLE_CLIENT_ID": "configure-me.apps.googleusercontent.com",
     "ALLOWED_EMAIL_DOMAIN": "sentry.io"
   },

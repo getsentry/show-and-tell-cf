@@ -18,14 +18,16 @@ Copy `.dev.vars.example` to `.dev.vars`, add the local Google OAuth client secre
 
 ## Production
 
-The production origin will be `https://showntell.sentry.new`. Every push to `main` runs the complete verification suite and deploys with `wrangler.production.json` through the `show-and-tell-cloudflare` GitHub environment.
+The canonical production origin will be `https://showandtell.sentry.new`. Every push to `main` runs the complete verification suite and deploys with `wrangler.production.json` through the `show-and-tell-cloudflare` GitHub environment.
 
 The environment requires these GitHub Actions secrets:
 
 - `CLOUDFLARE_ACCOUNT_ID`: Sentry's internal Cloudflare account ID.
 - `CLOUDFLARE_API_TOKEN`: an account-scoped token with permission to deploy Workers.
 
-Before deployment, replace the D1 ID and Google client ID placeholders in `wrangler.production.json`, add `GOOGLE_CLIENT_SECRET` with `wrangler secret put`, and create the OAuth web client with origin `https://showntell.sentry.new` and callback `https://showntell.sentry.new/api/auth/callback`. D1 is the role authority; promote initial admins after their first login with an explicit `users.is_admin` update.
+Before deployment, replace the D1 ID and Google client ID placeholders in `wrangler.production.json`, add `GOOGLE_CLIENT_SECRET` with `wrangler secret put`, and create the OAuth web client with origin `https://showandtell.sentry.new` and callback `https://showandtell.sentry.new/api/auth/callback`. D1 is the role authority; promote initial admins after their first login with an explicit `users.is_admin` update.
+
+Configure `showntell.sentry.new` as a Cloudflare redirect to `https://showandtell.sentry.new`, preserving path and query string, rather than serving the application under both hostnames. OAuth callbacks, host-only cookies, and same-origin checks use only the canonical hostname. This redirect still needs to be provisioned in Cloudflare.
 
 ## Quality gates
 
