@@ -101,6 +101,38 @@ describe('events and submissions', () => {
         )
       ).status,
     ).toBe(200);
+    const ownerList = await app.request(
+      `${origin}/api/events`,
+      {
+        headers: {Cookie: owner.cookie},
+      },
+      env,
+    );
+    expect(await ownerList.json()).toMatchObject({
+      events: [{id: eventId, submissionCount: 1}],
+    });
+    const ownerDetail = await app.request(
+      `${origin}/api/events/${eventId}`,
+      {
+        headers: {Cookie: owner.cookie},
+      },
+      env,
+    );
+    expect(await ownerDetail.json()).toMatchObject({
+      event: {submissionCount: 1},
+      submissions: [{id: submission.submission.id, hidden: true}],
+    });
+    const otherList = await app.request(
+      `${origin}/api/events`,
+      {
+        headers: {Cookie: other.cookie},
+      },
+      env,
+    );
+    expect(await otherList.json()).toMatchObject({
+      events: [{id: eventId, submissionCount: 0}],
+    });
+
     expect(
       (
         await request(

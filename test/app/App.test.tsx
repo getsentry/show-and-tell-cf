@@ -259,6 +259,70 @@ describe('App', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('ignores stale event-list refresh responses', async () => {
+    const staleEvents = deferred<Response>();
+    let eventLoads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events') {
+          eventLoads++;
+          if (eventLoads === 2) return staleEvents.promise;
+          const count = eventLoads === 1 ? 1 : 3;
+          return Promise.resolve(
+            jsonResponse({events: [{...october, submissionCount: count}]}),
+          );
+        }
+        if (url.endsWith('/visibility') && init?.method === 'POST')
+          return Promise.resolve(new Response(null, {status: 204}));
+        if (url === '/api/events/october')
+          return Promise.resolve(jsonResponse(detailFor(october, [submission])));
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+    const hide = await screen.findByRole('button', {name: 'Hide'});
+    fireEvent.click(hide);
+    fireEvent.click(hide);
+
+    expect(await screen.findByText('3 submissions')).toBeInTheDocument();
+    await act(async () =>
+      staleEvents.resolve(jsonResponse({events: [{...october, submissionCount: 2}]})),
+    );
+    expect(screen.getByText('3 submissions')).toBeInTheDocument();
+  });
+
+  it('keeps current selection errors when an old mutation refreshes', async () => {
+    const mutation = deferred<Response>();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events')
+          return Promise.resolve(jsonResponse({events: [october, november]}));
+        if (url.endsWith('/visibility') && init?.method === 'POST')
+          return mutation.promise;
+        if (url === '/api/events/october')
+          return Promise.resolve(jsonResponse(detailFor(october, [submission])));
+        if (url === '/api/events/november')
+          return Promise.resolve(new Response(null, {status: 500}));
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Hide'}));
+    fireEvent.click(screen.getByRole('button', {name: /November 2026/}));
+    expect(await screen.findByRole('button', {name: 'Retry'})).toBeInTheDocument();
+
+    await act(async () => mutation.resolve(new Response(null, {status: 204})));
+
+    expect(screen.getByRole('button', {name: 'Retry'})).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Request failed (500)');
+  });
+
   it('keeps the current playlist loading when an old mutation refreshes', async () => {
     const mutation = deferred<Response>();
     const novemberDetail = deferred<Response>();

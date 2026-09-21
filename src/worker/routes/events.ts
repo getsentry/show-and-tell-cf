@@ -30,10 +30,10 @@ eventRoutes.get('/', async (c) => {
       COUNT(s.id) submission_count
      FROM show_and_tell_events e
      LEFT JOIN submissions s ON s.event_id = e.id AND s.deleted_at IS NULL
-       AND (s.is_hidden = 0 OR ? = 'admin')
+       AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
      GROUP BY e.id ORDER BY e.created_at DESC`,
   )
-    .bind(c.get('user').role)
+    .bind(c.get('user').role, c.get('user').id)
     .all<EventRow>();
   const response: EventsResponse = {events: result.results.map(toEvent)};
   return c.json(response);
@@ -48,11 +48,19 @@ eventRoutes.post('/', requireRole('admin'), async (c) => {
   )
     .bind(id, input.title, input.description, c.get('user').id)
     .run();
-  return c.json({event: await getEvent(c.env.DB, id, c.get('user').role)}, 201);
+  return c.json(
+    {event: await getEvent(c.env.DB, id, c.get('user').role, c.get('user').id)},
+    201,
+  );
 });
 
 eventRoutes.get('/:eventId', async (c) => {
-  const event = await getEvent(c.env.DB, c.req.param('eventId'), c.get('user').role);
+  const event = await getEvent(
+    c.env.DB,
+    c.req.param('eventId'),
+    c.get('user').role,
+    c.get('user').id,
+  );
   if (!event) return notFound(c);
   const result = await c.env.DB.prepare(
     `SELECT s.id, s.event_id, s.creator_id, u.display_name creator_name,
@@ -70,7 +78,8 @@ eventRoutes.get('/:eventId', async (c) => {
 
 eventRoutes.post('/:eventId/submissions', async (c) => {
   const eventId = c.req.param('eventId');
-  if (!(await getEvent(c.env.DB, eventId, c.get('user').role))) return notFound(c);
+  if (!(await getEvent(c.env.DB, eventId, c.get('user').role, c.get('user').id)))
+    return notFound(c);
   const input = parseSubmission(await readJson(c.req.raw));
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
@@ -133,16 +142,17 @@ interface SubmissionRow {
   created_at: string;
 }
 
-async function getEvent(db: D1Database, id: string, role: string) {
+async function getEvent(db: D1Database, id: string, role: string, userId: string) {
   const row = await db
     .prepare(
       `SELECT e.id, e.title, e.description, e.created_at,
       COUNT(s.id) submission_count
      FROM show_and_tell_events e LEFT JOIN submissions s
-       ON s.event_id = e.id AND s.deleted_at IS NULL AND (s.is_hidden = 0 OR ? = 'admin')
+       ON s.event_id = e.id AND s.deleted_at IS NULL
+         AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
      WHERE e.id = ? GROUP BY e.id`,
     )
-    .bind(role, id)
+    .bind(role, userId, id)
     .first<EventRow>();
   return row ? toEvent(row) : null;
 }
