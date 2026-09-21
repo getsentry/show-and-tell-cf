@@ -43,6 +43,46 @@ describe('App', () => {
     );
   });
 
+  it('shows load failures without a contradictory loading state', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events')
+          return Promise.resolve(new Response(null, {status: 500}));
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Request failed (500)');
+    expect(screen.queryByText('Loading playlist…')).not.toBeInTheDocument();
+  });
+
+  it('reports mutation failures and preserves form input', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events' && init?.method === 'POST')
+          return Promise.resolve(new Response(null, {status: 500}));
+        if (url === '/api/events') return Promise.resolve(jsonResponse({events: []}));
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+    const title = await screen.findByLabelText('Title');
+    fireEvent.change(title, {target: {value: 'October 2026'}});
+    fireEvent.submit(
+      screen.getByRole('button', {name: 'Create playlist'}).closest('form')!,
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Request failed (500)');
+    expect(title).toHaveValue('October 2026');
+  });
+
   it('shows a loading state while the selected playlist is loading', async () => {
     const detail = deferred<Response>();
     vi.stubGlobal(

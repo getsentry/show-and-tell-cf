@@ -67,6 +67,11 @@ function ShowAndTell({user}: {user: SessionUser}) {
     void loadSelected(selectedId).catch((cause: Error) => setError(cause.message));
   }, [loadSelected, selectedId]);
 
+  function reportFailure(operation: Promise<void>) {
+    setError(null);
+    void operation.catch((cause: Error) => setError(cause.message));
+  }
+
   async function createEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -148,7 +153,10 @@ function ShowAndTell({user}: {user: SessionUser}) {
             </button>
           ))}
           {user.role === 'admin' ? (
-            <form className="stackedForm" onSubmit={(event) => void createEvent(event)}>
+            <form
+              className="stackedForm"
+              onSubmit={(event) => reportFailure(createEvent(event))}
+            >
               <h2>New Show &amp; Tell</h2>
               <label>
                 Title
@@ -176,7 +184,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
               </header>
               <form
                 className="submissionForm"
-                onSubmit={(event) => void createSubmission(event)}
+                onSubmit={(event) => reportFailure(createSubmission(event))}
               >
                 <h2>Add your project</h2>
                 <label>
@@ -219,14 +227,16 @@ function ShowAndTell({user}: {user: SessionUser}) {
                       {user.role === 'admin' ? (
                         <button
                           onClick={() =>
-                            void setHidden(submission.id, !submission.hidden)
+                            reportFailure(setHidden(submission.id, !submission.hidden))
                           }
                         >
                           {submission.hidden ? 'Show' : 'Hide'}
                         </button>
                       ) : null}
                       {user.role === 'admin' || submission.creatorId === user.id ? (
-                        <button onClick={() => void removeSubmission(submission.id)}>
+                        <button
+                          onClick={() => reportFailure(removeSubmission(submission.id))}
+                        >
                           Delete
                         </button>
                       ) : null}
@@ -238,7 +248,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
                 ) : null}
               </div>
             </>
-          ) : selectedId || !eventsLoaded ? (
+          ) : error ? null : selectedId || !eventsLoaded ? (
             <p className="emptyState">Loading playlist…</p>
           ) : (
             <p className="emptyState">No Show &amp; Tell playlists yet.</p>
