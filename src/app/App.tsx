@@ -31,18 +31,18 @@ function ShowAndTell({user}: {user: SessionUser}) {
   const [eventsLoaded, setEventsLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<EventResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [eventsLoadFailed, setEventsLoadFailed] = useState(false);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const [failedSelection, setFailedSelection] = useState<string | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const eventsRequest = useRef(0);
-  const eventsLoadFailedRef = useRef(false);
   const selectedRequests = useRef(new Map<string, number>());
 
   const selectEvent = useCallback((eventId: string | null) => {
     if (eventId !== selectedIdRef.current) {
       setFailedSelection(null);
-      setError(null);
+      setSelectionError(null);
     }
     selectedIdRef.current = eventId;
     setSelectedId(eventId);
@@ -55,14 +55,10 @@ function ShowAndTell({user}: {user: SessionUser}) {
       setEvents(result.events);
       if (!selectedIdRef.current) selectEvent(result.events[0]?.id ?? null);
       setEventsLoaded(true);
-      setEventsLoadFailed(false);
-      if (eventsLoadFailedRef.current) setError(null);
-      eventsLoadFailedRef.current = false;
+      setEventsError(null);
     } catch (cause) {
       if (request !== eventsRequest.current) return;
-      eventsLoadFailedRef.current = true;
-      setEventsLoadFailed(true);
-      setError(cause instanceof Error ? cause.message : 'Request failed');
+      setEventsError(cause instanceof Error ? cause.message : 'Request failed');
     }
   }, [selectEvent]);
   const loadSelected = useCallback(async (eventId: string) => {
@@ -83,14 +79,14 @@ function ShowAndTell({user}: {user: SessionUser}) {
     async (eventId: string) => {
       if (eventId === selectedIdRef.current) {
         setFailedSelection(null);
-        setError(null);
+        setSelectionError(null);
       }
       try {
         await loadSelected(eventId);
       } catch (cause) {
         if (eventId !== selectedIdRef.current) return;
         setFailedSelection(eventId);
-        setError(cause instanceof Error ? cause.message : 'Request failed');
+        setSelectionError(cause instanceof Error ? cause.message : 'Request failed');
       }
     },
     [loadSelected],
@@ -104,8 +100,8 @@ function ShowAndTell({user}: {user: SessionUser}) {
   }, [requestSelected, selectedId]);
 
   function reportFailure(operation: Promise<void>) {
-    setError(null);
-    void operation.catch((cause: Error) => setError(cause.message));
+    setMutationError(null);
+    void operation.catch((cause: Error) => setMutationError(cause.message));
   }
 
   async function createEvent(event: FormEvent<HTMLFormElement>) {
@@ -170,9 +166,9 @@ function ShowAndTell({user}: {user: SessionUser}) {
           <button type="submit">Sign out</button>
         </form>
       </header>
-      {error ? (
+      {eventsError || selectionError || mutationError ? (
         <p className="authError" role="alert">
-          {error}
+          {[eventsError, selectionError, mutationError].filter(Boolean).join(' · ')}
         </p>
       ) : null}
       <div className="workspace">
@@ -209,7 +205,12 @@ function ShowAndTell({user}: {user: SessionUser}) {
           ) : null}
         </aside>
         <section className="eventContent">
-          {failedSelection === selectedId && selectedId ? (
+          {eventsError ? (
+            <div className="emptyState">
+              <p>Could not refresh playlists.</p>
+              <button onClick={() => void loadEvents()}>Retry</button>
+            </div>
+          ) : failedSelection === selectedId && selectedId ? (
             <div className="emptyState">
               <p>Could not load this playlist.</p>
               <button onClick={() => requestSelected(selectedId)}>Retry</button>
@@ -289,11 +290,6 @@ function ShowAndTell({user}: {user: SessionUser}) {
                 ) : null}
               </div>
             </>
-          ) : eventsLoadFailed && !eventsLoaded ? (
-            <div className="emptyState">
-              <p>Could not load playlists.</p>
-              <button onClick={() => void loadEvents()}>Retry</button>
-            </div>
           ) : selectedId || !eventsLoaded ? (
             <p className="emptyState">Loading playlist…</p>
           ) : (

@@ -292,6 +292,42 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
+  it('reports concurrent post-mutation refresh failures deterministically', async () => {
+    let initialEvents = true;
+    let initialDetail = true;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/events') {
+          if (initialEvents) {
+            initialEvents = false;
+            return Promise.resolve(jsonResponse({events: [october]}));
+          }
+          return Promise.resolve(new Response(null, {status: 502}));
+        }
+        if (url.endsWith('/visibility') && init?.method === 'POST')
+          return Promise.resolve(new Response(null, {status: 204}));
+        if (url === '/api/events/october') {
+          if (initialDetail) {
+            initialDetail = false;
+            return Promise.resolve(jsonResponse(detailFor(october, [submission])));
+          }
+          return Promise.resolve(new Response(null, {status: 503}));
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Hide'}));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Request failed (502) · Request failed (503)',
+    );
+    expect(screen.getByRole('button', {name: 'Retry'})).toBeInTheDocument();
+  });
+
   it('offers retry when a post-mutation refresh fails', async () => {
     let detailLoads = 0;
     vi.stubGlobal(
