@@ -94,7 +94,7 @@ export function AppFrame({
         </a>
         <a className="juniorCredit" href="https://junior.sentry.dev/">
           <span>made by Junior</span>
-          <img src="/junior-mark.svg" width={28} height={28} alt="" />
+          <img src="/junior-avatar.png" width={28} height={28} alt="" />
         </a>
       </footer>
     </div>

@@ -37,7 +37,7 @@ describe('App', () => {
     expect(screen.queryByText('Made at Sentry')).not.toBeInTheDocument();
     const credit = screen.getByRole('link', {name: 'made by Junior'});
     expect(credit).toHaveAttribute('href', 'https://junior.sentry.dev/');
-    expect(credit.querySelector('img')).toHaveAttribute('src', '/junior-mark.svg');
+    expect(credit.querySelector('img')).toHaveAttribute('src', '/junior-avatar.png');
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
     expect(fetcher.mock.calls.map(([url]) => url)).not.toContain('/api/events/october');
     fireEvent.click(screen.getByRole('button', {name: 'New playlist'}));
