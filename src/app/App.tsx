@@ -10,6 +10,9 @@ import type {
 import {isJsonObject, isJsonString, type JsonInput} from '../shared/json';
 import {api, json} from './api';
 import {VideoPanel} from './VideoPanel';
+import {PlaylistPage, SharePlaylist} from './PlaylistPage';
+import {PlaylistOrder} from './PlaylistOrder';
+import {playlistPath, safeReturnTo} from '../shared/playlist';
 
 export function App() {
   const [user, setUser] = useState<SessionUser | null | undefined>();
@@ -30,19 +33,23 @@ export function App() {
 
   if (user === undefined) return <Loading />;
   if (user === null) return <SignIn authError={authError} />;
+  const path = safeReturnTo(window.location.pathname);
+  if (path !== '/') return <PlaylistPage eventId={path.slice('/playlists/'.length)} />;
   return <ShowAndTell user={user} />;
 }
 
 function ShowAndTell({user}: {user: SessionUser}) {
   const [events, setEvents] = useState<ShowAndTellEvent[]>([]);
   const [eventsLoaded, setEventsLoaded] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('event'),
+  );
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [failedSelection, setFailedSelection] = useState<string | null>(null);
-  const selectedIdRef = useRef<string | null>(null);
+  const selectedIdRef = useRef<string | null>(selectedId);
   const eventsRequest = useRef(0);
   const selectedRequests = useRef(new Map<string, number>());
   const [creatingEvent, setCreatingEvent] = useState(false);
@@ -86,7 +93,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
       setSelectionError(null);
     }
     try {
-      const result = await api<EventResponse>(`/events/${eventId}`);
+      const result = await api<EventResponse>(`/events/${encodeURIComponent(eventId)}`);
       if (
         request !== selectedRequests.current.get(eventId) ||
         eventId !== selectedIdRef.current
@@ -281,6 +288,26 @@ function ShowAndTell({user}: {user: SessionUser}) {
                   <p>{visibleSelection.event.description}</p>
                 ) : null}
               </header>
+              <div className="playlistActions">
+                <a
+                  className="primaryAction"
+                  href={playlistPath(visibleSelection.event.id)}
+                >
+                  Open playlist player
+                </a>
+                <SharePlaylist
+                  key={visibleSelection.event.id}
+                  eventId={visibleSelection.event.id}
+                />
+              </div>
+              {user.role === 'admin' && visibleSelection.submissions.length > 1 ? (
+                <PlaylistOrder
+                  key={visibleSelection.event.id}
+                  eventId={visibleSelection.event.id}
+                  submissions={visibleSelection.submissions}
+                  onOrdered={() => requestSelected(visibleSelection.event.id)}
+                />
+              ) : null}
               <form
                 className="submissionForm"
                 key={visibleSelection.event.id}
@@ -414,7 +441,14 @@ function SignIn({authError}: {authError: string | null}) {
           {authError}
         </p>
       ) : null}
-      <a className="primaryAction" href="/api/auth/login">
+      <a
+        className="primaryAction"
+        href={
+          safeReturnTo(window.location.pathname) === '/'
+            ? '/api/auth/login'
+            : `/api/auth/login?returnTo=${encodeURIComponent(safeReturnTo(window.location.pathname))}`
+        }
+      >
         Continue with Google
       </a>
     </main>

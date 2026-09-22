@@ -43,7 +43,9 @@ The D1 database ID and Google client ID are already configured in `wrangler.prod
 
 The canonical domain and Google login have been verified. D1 is the role authority; promote initial admins after their first login with an explicitly approved `users.is_admin` update. Every Cloudflare write requires explicit approval, including resource provisioning and production migrations/deployment.
 
-Configure `showntell.sentry.new` as a Cloudflare redirect to `https://showandtell.sentry.new`, preserving path and query string, rather than serving the application under both hostnames. OAuth callbacks, host-only cookies, and same-origin checks use only the canonical hostname. This redirect still needs to be provisioned in Cloudflare.
+`wrangler.production.json` declares both custom domains. The Worker redirects the exact legacy hostname `showntell.sentry.new` to `https://showandtell.sentry.new` with HTTP 308, preserving path and query before auth or asset handling. The legacy host never serves the application. OAuth callbacks, host-only cookies, and same-origin checks use only the canonical hostname; do not add a second Google callback.
+
+**Rollout approval required:** deploying the playlist PR applies additive D1 migration `0005_playlist_playback.sql`, updates the Worker, and provisions the legacy custom domain/DNS/certificate via Wrangler. The existing canonical custom domain is retained. Ensure the Workers Builds token can manage custom domains in the `sentry.new` zone as well as deploy Workers and migrate D1. Do not merge/deploy until the Cloudflare writes are approved. No separate redirect Worker or R2 public access is needed. After deployment/TLS issuance, check `curl -I 'https://showntell.sentry.new/playlists/<event-id>?view=screen'` returns a 308 to the matching canonical URL.
 
 ## Quality gates
 
@@ -62,7 +64,17 @@ Playlists and submissions need only a title and optional description. For dated 
 
 Create a submission first, then use **Choose video → Upload video** on its card. The browser uploads 50 MiB parts and shows saved-byte progress. Pause/resume, retry interrupted uploads, or discard an unfinished upload without deleting the submission. Reloading/switching playlists pauses transfers; reselect the **original, unchanged file** to resume. Completed parts and active upload discovery live on the server, including recovery when a create response is lost. The browser remembers `lastModified` when storage is available to catch accidental file revisions; this is a convenience check, not a content hash.
 
-Queued/processing status refreshes every five seconds. Failed processing offers retry or confirmed video removal for replacement. Ready videos have authenticated, native **Watch video** controls. Continuous playlist playback and ordering remain a subsequent PR.
+Queued/processing status refreshes every five seconds. Failed processing offers retry or confirmed video removal for replacement. Ready videos have authenticated, native **Watch video** controls.
+
+### Company playlist player
+
+Open **Open playlist player** on a playlist, or share `/playlists/<event-id>`. Google sign-in returns to this allowlisted local player path using the existing browser-bound OAuth state. **Play playlist** starts a two-video, alternating-buffer player inspired by Hack Week's screening player: it preloads the next clip, advances automatically, and offers native seek/volume/speed controls, pause/resume, previous/next, queue selection, fullscreen, retry/skip on error, and replay after completion. Audio is already loudness-normalized in the processed MP4; no second gain adjustment is applied.
+
+The screening endpoint includes only ready, non-hidden, non-deleted videos, identically for admins and members. It revalidates each clip before playback/transition; content requests remain session-authenticated. A browser may block automatic playback: **Retry video** recovers without silently skipping. Fullscreen support varies by browser. Already buffered/playing bytes cannot be revoked immediately.
+
+Admins use **Arrange playlist** and the up/down buttons; changes save immediately. Ordering includes hidden/unfinished submissions so they keep their place. New submissions append after ordered entries. A single atomic D1 statement compares the full previous order before changing positions; stale/concurrent edits or membership changes return 409 and refresh the editor. Reorder requests support up to 1,000 submissions. A screening uses a snapshot: **Refresh playlist** stops playback and reloads the latest order/readiness.
+
+Before launch, smoke-test two real videos through automatic advancement and replay; previous/next, seek, pause, volume and fullscreen; sharing through a signed-out Google login; admin reorder persistence; member reorder denial; hidden/deleted clips and expired sessions; failed media retry/skip; mobile layout; and the legacy-domain redirect. Test Safari/iOS as well as Chromium. The Junior admin/discovery API and transcripts remain deferred in issue #4.
 
 The backend ports Hack Week's private R2 multipart lifecycle, Workflow, and pinned FFmpeg 8.0.1 processor, without years, groups, voting, or team membership. Failed uploads or processing never remove the saved submission.
 
