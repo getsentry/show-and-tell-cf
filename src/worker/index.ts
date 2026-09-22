@@ -12,6 +12,8 @@ import {sessionRoutes} from './routes/session';
 import {submissionVideoRoutes, videosRoutes} from './routes/videos';
 import {reapExpiredMultipartVideoUploads} from './services/videos';
 
+// Required by the Containers SDK for the processor's scoped R2 outbound handler.
+export {ContainerProxy} from '@cloudflare/containers';
 export {VideoProcessorContainer} from './containers/video-processor';
 export {VideoProcessingWorkflow} from './workflows/video-processing';
 
