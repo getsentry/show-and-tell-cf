@@ -192,7 +192,8 @@ export function createPlaylistController(
   }
 
   function next() {
-    if (destroyed) return;
+    // Nothing to advance before the first play or after the wrap card.
+    if (destroyed || state.phase === 'idle' || state.phase === 'complete') return;
     if (state.index + 1 < items.length) return jump(state.index + 1);
     generation++;
     clearTitleTimers();

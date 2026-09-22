@@ -352,6 +352,11 @@ textarea::placeholder {
   background: var(--blurple);
   object-fit: cover;
 }
+/* Four name-derived tones: blurple, pink, green, yellow. */
+.avatar[data-tone='0'] {
+  color: var(--on-accent);
+  background: var(--blurple);
+}
 .avatar[data-tone='1'] {
   color: var(--ink);
   background: var(--pink);

@@ -344,6 +344,18 @@ describe('title cards and playback controls', () => {
     expect(state().phase).toBe('error');
     expect(play).not.toHaveBeenCalled();
   });
+  it('ignores next before the first play and after the wrap card', async () => {
+    const {player, states, getPlayback, state} = setup();
+    await player.next();
+    expect(states).toHaveLength(0);
+    expect(getPlayback).not.toHaveBeenCalled();
+    await player.jump(2);
+    await player.next();
+    expect(state().phase).toBe('complete');
+    await player.next();
+    expect(state()).toMatchObject({phase: 'complete', index: 2});
+    expect(getPlayback.mock.calls.map(([id]) => id)).toEqual(['c']);
+  });
   it('reports progress, seeks, and applies speed and mute to both slots', async () => {
     const {player, elements, state} = setup();
     await player.jump(0);

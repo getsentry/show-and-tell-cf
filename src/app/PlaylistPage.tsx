@@ -184,7 +184,8 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
         next: () => void controller.current?.next(),
         previous: () => {
           const player = controller.current;
-          if (player) void player.jump(stateRef.current.index - 1);
+          if (player && stateRef.current.phase !== 'idle')
+            void player.jump(stateRef.current.index - 1);
         },
         fullscreen: () => void toggleFullscreen(),
         mute: () => controller.current?.setMuted(!stateRef.current.muted),

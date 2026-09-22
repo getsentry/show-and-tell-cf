@@ -50,6 +50,7 @@ function initials(value: string) {
     .toUpperCase();
 }
 
+/** 0-3, matching the four `.avatar[data-tone]` colours in styles.css. */
 function tone(value: string) {
   let hash = 0;
   for (const char of value) hash = (hash * 31 + char.charCodeAt(0)) % 4;
