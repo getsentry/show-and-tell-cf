@@ -16,6 +16,7 @@ interface SessionRow {
   display_name: string;
   avatar_url: string | null;
   is_admin: number;
+  view_as_member: number;
   google_subject: string | null;
 }
 
@@ -42,7 +43,7 @@ export async function findUserBySessionToken(
   const row = await db
     .prepare(
       `SELECT s.token_hash, s.user_id, u.email, u.display_name, u.avatar_url,
-       u.is_admin, u.google_subject FROM user_sessions s
+       u.is_admin, u.google_subject, s.view_as_member FROM user_sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ?`,
     )
@@ -108,12 +109,14 @@ export function randomBase64Url(bytes: number) {
 }
 
 function toSessionUser(row: SessionRow): SessionUser {
+  const actualRole = row.is_admin === 1 ? 'admin' : 'member';
   return {
     id: row.user_id,
     email: row.email.toLowerCase(),
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
-    role: row.is_admin === 1 ? 'admin' : 'member',
+    role: actualRole === 'admin' && row.view_as_member === 1 ? 'member' : actualRole,
+    actualRole,
   };
 }
 

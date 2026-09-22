@@ -735,6 +735,112 @@ textarea::placeholder {
   color: var(--muted);
 }
 
+/* The overview is real text and CSS, never a raster title image. */
+.overviewHero {
+  padding: clamp(2.5rem, 8vw, 6rem) 1rem;
+  margin-bottom: 2rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border-strong);
+}
+.overviewHero h1 {
+  margin: 0;
+  font-size: clamp(3rem, 10vw, 7.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.065em;
+  font-weight: 800;
+}
+.overviewHero h1 span {
+  color: var(--blurple);
+}
+.overviewHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.overviewHeading h2 {
+  margin: 0;
+}
+.overviewSection .newPlaylist {
+  margin-bottom: 1.5rem;
+}
+.eventGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: 1.5rem;
+}
+.eventCard {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 1rem;
+  background: var(--surface-raised);
+}
+.eventCardHero {
+  display: flex;
+  align-items: center;
+  min-height: 12rem;
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+  color: #fff;
+  background: #362d59;
+}
+.eventCard:nth-child(3n + 2) .eventCardHero {
+  background: #533d80;
+}
+.eventCard:nth-child(3n + 3) .eventCardHero {
+  background: #6e315c;
+}
+.eventCardHero h3 {
+  margin: 0;
+  font-size: clamp(1.75rem, 3vw, 2.75rem);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+}
+.eventCardBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.eventCardBody p {
+  margin: 0;
+}
+.eventCardBody .primaryAction {
+  justify-content: center;
+  margin-top: auto;
+}
+.eventCardBody .submissionLink {
+  align-self: flex-start;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-underline-offset: 0.2em;
+}
+.eventCount {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.viewModeSwitch {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.viewModeSwitch .textButton {
+  padding: 0;
+  text-align: left;
+}
+.viewModeSwitch small {
+  max-width: 14rem;
+  color: var(--danger-ink);
+}
+
 /* Home: playlists, hero, compose, lineup. */
 .homePage {
   width: 100%;
@@ -2020,6 +2126,24 @@ kbd {
   }
 }
 @media (max-width: 560px) {
+  .masthead {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+  }
+  .identityActions {
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .viewModeSwitch {
+    flex: 1;
+  }
+  .viewModeSwitch > span {
+    display: none;
+  }
+  .identityActions .textButton {
+    white-space: nowrap;
+  }
   .homePage,
   .watchPage {
     padding-inline: 1rem;

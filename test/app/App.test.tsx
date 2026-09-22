@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import {act, cleanup, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
-import {App} from '../../src/app/App';
+import {App, defaultPlaylistTitle} from '../../src/app/App';
 
 afterEach(() => {
   cleanup();
@@ -11,6 +11,209 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('defaults new titles to the current local month and year', () => {
+    expect(defaultPlaylistTitle(new Date(2026, 8, 22))).toBe(
+      'Show & Tell September - 2026',
+    );
+    expect(defaultPlaylistTitle(new Date(2027, 0, 1))).toBe('Show & Tell January - 2027');
+  });
+
+  it('opens on the HTML overview, with watch and upload links and collapsed creation', async () => {
+    const fetcher = mockOverview();
+    render(<App />);
+    expect(
+      await screen.findByRole('article', {name: 'October 2026'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', {name: 'Show & Tell', level: 1}),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('link', {name: 'Watch playlist'})[0]).toHaveAttribute(
+      'href',
+      '/playlists/october',
+    );
+    expect(
+      screen.getAllByRole('link', {name: 'Upload & submissions'})[0],
+    ).toHaveAttribute('href', '/events/october');
+    expect(screen.queryByRole('form')).not.toBeInTheDocument();
+    expect(fetcher.mock.calls.map(([url]) => url)).not.toContain('/api/events/october');
+    fireEvent.click(screen.getByRole('button', {name: 'New playlist'}));
+    expect(screen.getByRole('textbox', {name: 'Title'})).toHaveValue(
+      defaultPlaylistTitle(),
+    );
+    expect(screen.getByRole('button', {name: 'Cancel new playlist'})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Cancel new playlist'}));
+    expect(screen.queryByRole('form', {name: 'Create playlist'})).not.toBeInTheDocument();
+  });
+
+  it('navigates overview to submissions and supports browser back/forward without autoselection', async () => {
+    mockOverview();
+    render(<App />);
+    fireEvent.click(
+      (await screen.findAllByRole('link', {name: 'Upload & submissions'}))[1],
+    );
+    expect(
+      await screen.findByRole('form', {name: 'Create submission'}),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/events/november');
+    expect(screen.queryByRole('button', {name: 'New playlist'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', {name: '← All shows'}));
+    expect(window.location.pathname).toBe('/');
+    expect(
+      screen.queryByRole('form', {name: 'Create submission'}),
+    ).not.toBeInTheDocument();
+    act(() => {
+      window.history.replaceState(null, '', '/events/october');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(
+      await screen.findByRole('heading', {name: 'October 2026', level: 1}),
+    ).toBeInTheDocument();
+    act(() => {
+      window.history.replaceState(null, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(
+      await screen.findByRole('article', {name: 'October 2026'}),
+    ).toBeInTheDocument();
+  });
+
+  it.each(['/events/october', '/?event=october'])(
+    'preserves the submission destination through login: %s',
+    async (path) => {
+      window.history.replaceState(null, '', path);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(new Response(null, {status: 401})),
+      );
+      render(<App />);
+      expect(
+        await screen.findByRole('link', {name: 'Continue with Google'}),
+      ).toHaveAttribute('href', '/api/auth/login?returnTo=%2Fevents%2Foctober');
+    },
+  );
+
+  it('switches effective role and clears admin data while retaining the current deep link', async () => {
+    let memberView = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/session/view-mode') {
+          memberView = init?.body === JSON.stringify({mode: 'member'});
+          return Promise.resolve(
+            jsonResponse({user: {...admin, role: memberView ? 'member' : 'admin'}}),
+          );
+        }
+        if (url === '/api/events')
+          return Promise.resolve(jsonResponse({events: [october]}));
+        if (url === '/api/events/october')
+          return Promise.resolve(
+            jsonResponse(
+              detailFor(october, memberView ? [] : [{...submission, hidden: true}]),
+            ),
+          );
+        if (url.endsWith('/video/upload'))
+          return Promise.resolve(new Response(JSON.stringify({upload: null})));
+        if (url.endsWith('/video'))
+          return Promise.resolve(new Response(JSON.stringify({video: null})));
+        throw new Error(url);
+      }),
+    );
+    window.history.replaceState(null, '', '/events/october');
+    render(<App />);
+    expect(
+      await screen.findByRole('heading', {name: 'Project demo'}),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Switch to user view'}));
+    expect(
+      await screen.findByRole('button', {name: 'Back to admin'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', {name: 'Project demo'})).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe('/events/october');
+    expect(
+      await screen.findByRole('form', {name: 'Create submission'}),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Back to admin'}));
+    expect(
+      await screen.findByRole('heading', {name: 'Project demo'}),
+    ).toBeInTheDocument();
+  });
+
+  it('does not navigate from a late event creation after switching views', async () => {
+    const pending = deferred<Response>();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+        if (url === '/api/session/view-mode')
+          return Promise.resolve(jsonResponse({user: {...admin, role: 'member'}}));
+        if (url === '/api/events' && init?.method === 'POST') return pending.promise;
+        if (url === '/api/events') return Promise.resolve(jsonResponse({events: []}));
+        throw new Error(url);
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'New playlist'}));
+    fireEvent.submit(screen.getByRole('form', {name: 'Create playlist'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Switch to user view'}));
+    expect(
+      await screen.findByRole('button', {name: 'Back to admin'}),
+    ).toBeInTheDocument();
+    await act(async () => pending.resolve(jsonResponse({event: october})));
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByRole('form', {name: 'Create playlist'})).not.toBeInTheDocument();
+  });
+
+  it('never exposes admin controls to a member on the overview', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        Promise.resolve(
+          jsonResponse(
+            url === '/api/session'
+              ? {user: {...admin, role: 'member', actualRole: 'member'}}
+              : {events: [october]},
+          ),
+        ),
+      ),
+    );
+    render(<App />);
+    expect(
+      await screen.findByRole('article', {name: 'October 2026'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'New playlist'})).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {name: /admin|user view/i}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows view-switch failures without changing the view', async () => {
+    mockOverview(true);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Switch to user view'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Request failed (500)');
+    expect(screen.getByRole('button', {name: 'Switch to user view'})).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'New playlist'})).toBeInTheDocument();
+  });
+
+  it('shows Google avatars on submissions, with initials after an image failure', async () => {
+    mockOverview();
+    window.history.replaceState(null, '', '/events/october');
+    render(<App />);
+    const card = await screen.findByRole('article', {name: 'Project demo'});
+    const image = card.querySelector('img')!;
+    expect(image).toHaveAttribute('src', 'https://example.test/avatar.jpg');
+    expect(image).toHaveAttribute('referrerpolicy', 'no-referrer');
+    fireEvent.error(image);
+    expect(card.querySelector('img')).toBeNull();
+    expect(card.querySelector('.avatar')).toHaveTextContent('A');
+    expect(
+      screen.queryByText('Switching playlists pauses uploads.'),
+    ).not.toBeInTheDocument();
+  });
   it('introduces the Show & Tell application', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, {status: 401})));
     render(<App />);
@@ -122,6 +325,7 @@ describe('App', () => {
     );
 
     render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'New playlist'}));
     fireEvent.submit(
       (await screen.findByRole('button', {name: 'Create playlist'})).closest('form')!,
     );
@@ -152,6 +356,7 @@ describe('App', () => {
     );
 
     render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'New playlist'}));
     const title = await screen.findByLabelText('Title');
     fireEvent.change(title, {target: {value: 'October 2026'}});
     fireEvent.submit(
@@ -180,6 +385,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
 
     expect(await screen.findByRole('button', {name: /October 2026/})).toBeInTheDocument();
@@ -204,6 +410,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
 
     expect(await screen.findByRole('button', {name: 'Retry'})).toBeInTheDocument();
@@ -237,6 +444,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
 
     expect(await screen.findByText('Could not load this playlist.')).toBeInTheDocument();
@@ -274,6 +482,7 @@ describe('App', () => {
     );
 
     render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'New playlist'}));
     const title = await screen.findByLabelText('Title');
     fireEvent.change(title, {target: {value: 'October 2026'}});
     fireEvent.submit(
@@ -282,7 +491,8 @@ describe('App', () => {
 
     await act(async () => created.resolve(jsonResponse({event: october})));
 
-    await waitFor(() => expect(title).toHaveValue(''));
+    await waitFor(() => expect(title).not.toBeInTheDocument());
+    expect(window.location.pathname).toBe('/events/october');
     expect(await screen.findByRole('button', {name: /October 2026/})).toBeInTheDocument();
   });
 
@@ -311,10 +521,11 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
     await screen.findByRole('form', {name: 'Create submission'});
     expect(screen.queryByRole('textbox', {name: 'Project link'})).not.toBeInTheDocument();
-    const title = screen.getAllByRole('textbox', {name: 'Title'})[1];
+    const title = screen.getByRole('textbox', {name: 'Title'});
     fireEvent.change(title, {target: {value: 'Project demo'}});
     fireEvent.submit(
       screen.getByRole('button', {name: 'Create submission'}).closest('form')!,
@@ -343,6 +554,7 @@ describe('App', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetcher);
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
     const form = await screen.findByRole('form', {name: 'Create submission'});
     fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Demo'}});
@@ -385,6 +597,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
     fireEvent.click(await screen.findByRole('button', {name: 'Hide'}));
 
@@ -428,6 +641,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
     fireEvent.click(await screen.findByRole('button', {name: 'Hide'}));
 
@@ -461,6 +675,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
     fireEvent.click(await screen.findByRole('button', {name: 'Hide'}));
 
@@ -498,6 +713,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
     const hide = await screen.findByRole('button', {name: 'Hide'});
     fireEvent.click(hide);
@@ -532,6 +748,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
     fireEvent.click(await screen.findByRole('button', {name: 'Hide'}));
     fireEvent.click(screen.getByRole('button', {name: /November 2026/}));
@@ -565,6 +782,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
     fireEvent.click(await screen.findByRole('button', {name: 'Hide'}));
     fireEvent.click(screen.getByRole('button', {name: /November 2026/}));
@@ -601,6 +819,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
     fireEvent.click(await screen.findByRole('button', {name: /November 2026/}));
     fireEvent.click(screen.getByRole('button', {name: /October 2026/}));
@@ -633,6 +852,7 @@ describe('App', () => {
       }),
     );
 
+    window.history.replaceState(null, '', '/events/october');
     render(<App />);
     fireEvent.click(await screen.findByRole('button', {name: /November 2026/}));
     expect(
@@ -652,6 +872,7 @@ const admin = {
   displayName: 'Admin',
   avatarUrl: null,
   role: 'admin',
+  actualRole: 'admin',
 };
 const october = {
   id: 'october',
@@ -666,6 +887,7 @@ const submission = {
   eventId: october.id,
   creatorId: admin.id,
   creatorName: admin.displayName,
+  creatorAvatarUrl: 'https://example.test/avatar.jpg',
   title: 'Project demo',
   description: null,
   hidden: false,
@@ -687,6 +909,27 @@ function jsonResponse(body: TestResponseBody) {
     headers: {'Content-Type': 'application/json'},
   });
 }
+function mockOverview(failSwitch = false) {
+  const fetcher = vi.fn((url: string) => {
+    if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+    if (url === '/api/session/view-mode' && failSwitch)
+      return Promise.resolve(new Response(null, {status: 500}));
+    if (url === '/api/events')
+      return Promise.resolve(jsonResponse({events: [october, november]}));
+    if (url === '/api/events/october')
+      return Promise.resolve(jsonResponse(detailFor(october, [submission])));
+    if (url === '/api/events/november')
+      return Promise.resolve(jsonResponse(detailFor(november)));
+    if (url.endsWith('/video/upload'))
+      return Promise.resolve(new Response(JSON.stringify({upload: null})));
+    if (url.endsWith('/video'))
+      return Promise.resolve(new Response(JSON.stringify({video: null})));
+    throw new Error(url);
+  });
+  vi.stubGlobal('fetch', fetcher);
+  return fetcher;
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((resolvePromise) => {

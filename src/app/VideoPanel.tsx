@@ -451,7 +451,6 @@ export function VideoPanel({
           ) : null}
           <p id={`${id}-hint`} className="formHint">
             Up to 5 GiB · 10 minutes maximum · MP4, MOV, WebM and other video formats.
-            Switching playlists pauses uploads.
           </p>
           {operation === 'uploading' || operation === 'completing' ? (
             <div className="uploadProgress" role="status">

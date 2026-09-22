@@ -1,6 +1,7 @@
-import type {ReactNode} from 'react';
+import {useState, type ReactNode} from 'react';
 
-import type {SessionUser} from '../../shared/api';
+import type {SessionUser, SessionResponse} from '../../shared/api';
+import {api, errorMessage, json} from '../api';
 import {Avatar} from './Avatar';
 import {SentrySymbol} from './SentrySymbol';
 import {ThemeToggle} from './ThemeToggle';
@@ -9,11 +10,33 @@ export function AppFrame({
   user,
   section,
   children,
+  onViewModeChange,
 }: {
   user: SessionUser;
   section?: 'playlists' | 'screening';
   children: ReactNode;
+  onViewModeChange?: (user: SessionUser) => void;
 }) {
+  const [switching, setSwitching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function switchView() {
+    if (switching) return;
+    setSwitching(true);
+    setError(null);
+    try {
+      const result = await api<SessionResponse>(
+        '/session/view-mode',
+        json('POST', {
+          mode: user.role === 'admin' ? 'member' : 'admin',
+        }),
+      );
+      onViewModeChange?.(result.user);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSwitching(false);
+    }
+  }
   return (
     <div className="appFrame">
       <header className="masthead">
@@ -33,6 +56,19 @@ export function AppFrame({
         </nav>
         <div className="identityActions">
           <ThemeToggle />
+          {user.actualRole === 'admin' && onViewModeChange ? (
+            <div className="viewModeSwitch">
+              <span>Viewing as {user.role === 'admin' ? 'admin' : 'user'}</span>
+              <button
+                className="textButton"
+                disabled={switching}
+                onClick={() => void switchView()}
+              >
+                {user.role === 'admin' ? 'Switch to user view' : 'Back to admin'}
+              </button>
+              {error ? <small role="alert">{error}</small> : null}
+            </div>
+          ) : null}
           <span
             className="identity"
             aria-label={`Signed in as ${user.displayName}, ${user.role}`}

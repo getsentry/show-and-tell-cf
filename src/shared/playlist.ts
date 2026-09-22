@@ -16,7 +16,13 @@ export function playlistPath(eventId: string) {
   return `/playlists/${encodeURIComponent(eventId)}`;
 }
 
-/** Only known local player routes may be used as OAuth return destinations. */
+export function submissionPath(eventId: string) {
+  return `/events/${encodeURIComponent(eventId)}`;
+}
+
+/** Only known local player and submission routes may be used as OAuth return destinations. */
 export function safeReturnTo(value: string | undefined) {
-  return value && /^\/playlists\/[a-zA-Z0-9_-]{1,128}$/.test(value) ? value : '/';
+  return value && /^\/(?:playlists|events)\/[a-zA-Z0-9_-]{1,128}$/.test(value)
+    ? value
+    : '/';
 }

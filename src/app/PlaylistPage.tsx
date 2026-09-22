@@ -2,7 +2,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {SessionUser} from '../shared/api';
 import type {PlaylistItem, PlaylistResponse} from '../shared/playlist';
-import {playlistPath} from '../shared/playlist';
+import {playlistPath, submissionPath} from '../shared/playlist';
 import type {PlaybackResponse} from '../shared/videos';
 import {api, errorMessage} from './api';
 import {AppFrame} from './components/AppFrame';
@@ -20,7 +20,15 @@ import {
 /** Controls fade out this long after the pointer rests, in fullscreen only. */
 const IDLE_CONTROLS_MS = 2_500;
 
-export function PlaylistPage({eventId, user}: {eventId: string; user: SessionUser}) {
+export function PlaylistPage({
+  eventId,
+  user,
+  onViewModeChange,
+}: {
+  eventId: string;
+  user: SessionUser;
+  onViewModeChange?: (user: SessionUser) => void;
+}) {
   const [data, setData] = useState<PlaylistResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
@@ -41,9 +49,9 @@ export function PlaylistPage({eventId, user}: {eventId: string; user: SessionUse
     return () => controller.abort();
   }, [eventId, revision]);
 
-  const backHref = `/?event=${encodeURIComponent(eventId)}`;
+  const backHref = submissionPath(eventId);
   return (
-    <AppFrame user={user} section="screening">
+    <AppFrame user={user} section="screening" onViewModeChange={onViewModeChange}>
       <main className="watchPage">
         {error ? (
           <PageState tone="error" title="Could not load the screening" detail={error}>
@@ -436,9 +444,18 @@ function Backdrop() {
   );
 }
 
-export function SharePlaylist({eventId}: {eventId: string}) {
+export function SharePlaylist({
+  eventId,
+  kind = 'playlist',
+}: {
+  eventId: string;
+  kind?: 'playlist' | 'submission';
+}) {
   const [message, setMessage] = useState('');
-  const link = new URL(playlistPath(eventId), window.location.origin).href;
+  const link = new URL(
+    kind === 'playlist' ? playlistPath(eventId) : submissionPath(eventId),
+    window.location.origin,
+  ).href;
   async function copy() {
     try {
       await navigator.clipboard.writeText(link);
@@ -450,7 +467,7 @@ export function SharePlaylist({eventId}: {eventId: string}) {
   return (
     <div className="sharePlaylist">
       <button className="textAction" onClick={() => void copy()}>
-        Copy playlist link
+        {kind === 'playlist' ? 'Copy playlist link' : 'Copy submission link'}
       </button>
       <span role="status">{message}</span>
     </div>

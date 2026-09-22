@@ -63,7 +63,7 @@ eventRoutes.get('/:eventId', async (c) => {
   );
   if (!event) return notFound(c);
   const result = await c.env.DB.prepare(
-    `SELECT s.id, s.event_id, s.creator_id, u.display_name creator_name,
+    `SELECT s.id, s.event_id, s.creator_id, u.display_name creator_name, u.avatar_url creator_avatar_url,
       s.title, s.description, s.is_hidden, s.created_at
      FROM submissions s JOIN users u ON u.id = s.creator_id
      WHERE s.event_id = ? AND s.deleted_at IS NULL
@@ -136,6 +136,7 @@ interface SubmissionRow {
   event_id: string;
   creator_id: string;
   creator_name: string;
+  creator_avatar_url: string | null;
   title: string;
   description: string | null;
   is_hidden: number;
@@ -160,7 +161,7 @@ async function getEvent(db: D1Database, id: string, role: string, userId: string
 async function getSubmission(db: D1Database, id: string) {
   const row = await db
     .prepare(
-      `SELECT s.id, s.event_id, s.creator_id, u.display_name creator_name,
+      `SELECT s.id, s.event_id, s.creator_id, u.display_name creator_name, u.avatar_url creator_avatar_url,
       s.title, s.description, s.is_hidden, s.created_at
      FROM submissions s JOIN users u ON u.id = s.creator_id WHERE s.id = ?`,
     )
@@ -185,6 +186,7 @@ function toSubmission(row: SubmissionRow): Submission {
     eventId: row.event_id,
     creatorId: row.creator_id,
     creatorName: row.creator_name,
+    creatorAvatarUrl: row.creator_avatar_url,
     title: row.title,
     description: row.description,
     hidden: row.is_hidden === 1,

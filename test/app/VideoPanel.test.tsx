@@ -11,6 +11,7 @@ const submission: Submission = {
   id: 'submission-1',
   eventId: 'event-1',
   creatorId: 'owner',
+  creatorAvatarUrl: null,
   creatorName: 'Owner',
   title: 'My demo',
   description: null,
