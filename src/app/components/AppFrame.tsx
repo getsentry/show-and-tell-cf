@@ -92,7 +92,10 @@ export function AppFrame({
           <SentrySymbol />
           <span>SHOW &amp; TELL</span>
         </a>
-        <span>made at Sentry</span>
+        <a className="juniorCredit" href="https://junior.sentry.dev/">
+          <span>made by Junior</span>
+          <img src="/junior-avatar.png" width={28} height={28} alt="" />
+        </a>
       </footer>
     </div>
   );
