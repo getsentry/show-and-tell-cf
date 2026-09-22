@@ -122,8 +122,17 @@ export function createPlaylistController(
         void next();
     };
     const error = () => {
+      const failedVideoId = slots[slot].id;
       slots[slot].id = null;
-      if (slot === active() && ['loading', 'playing', 'paused'].includes(state.phase))
+      // The selected index changes before revalidation replaces the source. A
+      // same-slot jump can still receive an error from the outgoing clip; only
+      // fail playback if the attached source belongs to the selected video.
+      if (
+        failedVideoId !== null &&
+        failedVideoId === items[state.index]?.videoId &&
+        slot === active() &&
+        ['loading', 'playing', 'paused'].includes(state.phase)
+      )
         fail(
           new Error('Private video could not be loaded. Retry or skip it.'),
           generation,

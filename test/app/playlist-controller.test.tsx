@@ -118,6 +118,57 @@ describe('two-buffer playlist controller', () => {
     await waiting;
     expect(second.elements[0].hasAttribute('src')).toBe(false);
   });
+  it('ignores an outgoing clip error during a same-slot jump revalidation', async () => {
+    const delayed = deferred<PlaybackResponse>();
+    const fetch = vi.fn((id: string) =>
+      id === 'c' ? delayed.promise : Promise.resolve(playback(id)),
+    );
+    const {player, elements, state} = setup(fetch);
+    await player.jump(0);
+    const pending = player.jump(2);
+    expect(elements[0].src).toContain('/a/content');
+    elements[0].dispatchEvent(new Event('error'));
+    expect(state()).toMatchObject({phase: 'loading', index: 2, error: null});
+    delayed.resolve(playback('c'));
+    await pending;
+    expect(elements[0].src).toContain('/c/content');
+    expect(state()).toMatchObject({phase: 'playing', index: 2, error: null});
+  });
+  it('still reports an error from the selected preloaded clip during revalidation', async () => {
+    const delayed = deferred<PlaybackResponse>();
+    const fetch = vi.fn(async (id: string) => playback(id));
+    const {player, elements, state} = setup(fetch);
+    await player.jump(0);
+    await flush();
+    expect(elements[1].src).toContain('/b/content');
+    fetch.mockImplementationOnce(() => delayed.promise);
+    const pending = player.jump(1);
+    elements[1].dispatchEvent(new Event('error'));
+    expect(state()).toMatchObject({phase: 'error', index: 1});
+    delayed.resolve(playback('b'));
+    await pending;
+    expect(state().phase).toBe('error');
+    await player.toggle();
+    expect(state()).toMatchObject({phase: 'playing', index: 1, error: null});
+  });
+  it('reports selected-source loading errors and ignores errors after source removal', async () => {
+    const playing = deferred<void>();
+    const {player, elements, state} = setup();
+    vi.spyOn(elements[0], 'play').mockReturnValueOnce(playing.promise);
+    const pending = player.jump(0);
+    await flush();
+    expect(state().phase).toBe('loading');
+    elements[0].dispatchEvent(new Event('error'));
+    expect(state().phase).toBe('error');
+    playing.resolve();
+    await pending;
+    expect(state().phase).toBe('error');
+    await player.jump(2);
+    // Jumping to the last item removes the other slot's preload.
+    expect(elements[1].hasAttribute('src')).toBe(false);
+    elements[1].dispatchEvent(new Event('error'));
+    expect(state()).toMatchObject({phase: 'playing', index: 2, error: null});
+  });
   it('ignores stale play rejections after navigating to another clip', async () => {
     const old = deferred<void>();
     const {player, elements, state} = setup();
