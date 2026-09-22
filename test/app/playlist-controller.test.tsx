@@ -98,6 +98,51 @@ describe('two-buffer playlist controller', () => {
     await player.jump(0);
     expect(state().index).toBe(0);
   });
+  it('restarts a pending next-clip preload after pause and resume', async () => {
+    const original = deferred<PlaybackResponse>();
+    const restarted = deferred<PlaybackResponse>();
+    let preloadCalls = 0;
+    const fetch = vi.fn((id: string) => {
+      if (id === 'b') return ++preloadCalls === 1 ? original.promise : restarted.promise;
+      return Promise.resolve(playback(id));
+    });
+    const {player, elements, state} = setup(fetch);
+    await player.jump(0);
+    expect(preloadCalls).toBe(1);
+    await player.toggle();
+    expect(state().phase).toBe('paused');
+    await player.toggle();
+    expect(state().phase).toBe('playing');
+    expect(preloadCalls).toBe(2);
+    original.resolve(playback('b'));
+    await flush();
+    expect(elements[1].hasAttribute('src')).toBe(false);
+    restarted.resolve(playback('b'));
+    await flush();
+    expect(elements[1].src).toContain('/b/content');
+    expect(state()).toMatchObject({phase: 'playing', index: 0});
+  });
+  it('keeps resumed playback usable when the restarted preload fails', async () => {
+    const fetch = vi.fn(async (id: string) => {
+      if (id === 'b') throw new Error('preload unavailable');
+      return playback(id);
+    });
+    const {player, state} = setup(fetch);
+    await player.jump(0);
+    await player.toggle();
+    await player.toggle();
+    await flush();
+    expect(fetch.mock.calls.filter(([id]) => id === 'b')).toHaveLength(2);
+    expect(state()).toMatchObject({phase: 'playing', index: 0, error: null});
+  });
+  it('does not request a next clip when resuming the final video', async () => {
+    const {player, getPlayback, state} = setup();
+    await player.jump(2);
+    await player.toggle();
+    await player.toggle();
+    expect(getPlayback.mock.calls.map(([id]) => id)).toEqual(['c', 'c']);
+    expect(state()).toMatchObject({phase: 'playing', index: 2});
+  });
   it('ignores stale same-slot fetches and never attaches after destruction', async () => {
     const old = deferred<PlaybackResponse>();
     const fetch = vi.fn((id: string) =>

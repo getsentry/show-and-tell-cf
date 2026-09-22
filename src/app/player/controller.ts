@@ -57,6 +57,14 @@ export function createPlaylistController(
     elements[slot].load();
   }
 
+  function preloadNext(index: number, operation: number) {
+    if (index + 1 < items.length) {
+      void prepare(index + 1, operation).catch(() => {
+        // Preload failure is retried on transition, not surfaced over this clip.
+      });
+    } else clear(1 - active());
+  }
+
   function fail(cause: unknown, operation: number) {
     if (!current(operation)) return;
     generation++;
@@ -98,11 +106,7 @@ export function createPlaylistController(
         return;
       }
       publish({phase: 'playing'});
-      if (index + 1 < items.length) {
-        void prepare(index + 1, operation).catch(() => {
-          // Preload failure is retried on transition, not surfaced over this clip.
-        });
-      } else clear(1 - active());
+      preloadNext(index, operation);
     } catch (cause) {
       fail(cause, operation);
     }
@@ -170,7 +174,12 @@ export function createPlaylistController(
           await prepare(state.index, operation);
           if (!current(operation)) return;
           await elements[active()].play();
-          if (current(operation)) publish({phase: 'playing'});
+          if (current(operation)) {
+            publish({phase: 'playing'});
+            // Resuming advances the generation, fencing any pending preload.
+            // Restart it under this operation just as a fresh jump would.
+            preloadNext(state.index, operation);
+          }
         } catch (cause) {
           fail(cause, operation);
         }
