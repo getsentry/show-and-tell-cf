@@ -275,7 +275,6 @@ function ShowAndTell({
         {!selectedId ? (
           <>
             <header className="overviewHero">
-              <p className="kicker">Made at Sentry</p>
               <h1>
                 Show <span>&amp;</span> Tell
               </h1>
@@ -626,7 +625,6 @@ function Loading() {
     <main className="authShell authShell--loading">
       <section className="authState authState--loading" aria-busy="true">
         <Loader />
-        <p className="kicker">Sentry internal</p>
         <h1>Loading Show &amp; Tell</h1>
         <p>Checking your session…</p>
       </section>
@@ -646,9 +644,7 @@ function SignIn({authError}: {authError: string | null}) {
         <span className="authMark" aria-hidden="true">
           <SentrySymbol />
         </span>
-        <p className="kicker">Sentry internal</p>
         <h1>Show &amp; Tell</h1>
-        <p>Sign in with your Sentry Google account to watch and share demo videos.</p>
         {authError ? (
           <p className="authError" role="alert">
             {authError}

@@ -582,6 +582,8 @@ textarea::placeholder {
 }
 .siteFooter {
   display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   width: calc(100% - 2.5rem);
@@ -591,6 +593,19 @@ textarea::placeholder {
   color: var(--muted);
   font-size: 0.8rem;
   border-top: 1px solid var(--line);
+}
+.juniorCredit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: inherit;
+  text-decoration: none;
+}
+.juniorCredit:hover {
+  text-decoration: underline;
+}
+.juniorCredit img {
+  flex-shrink: 0;
 }
 .footerWordmark svg {
   width: 1.2rem;
@@ -664,8 +679,47 @@ textarea::placeholder {
   color: var(--on-accent);
   border-radius: 1rem;
   background: var(--blurple);
-  box-shadow: 0 10px 25px rgba(117, 83, 255, 0.35);
-  transform: rotate(-6deg);
+  position: relative;
+}
+.authMark::after {
+  position: absolute;
+  z-index: -1;
+  bottom: -0.65rem;
+  left: 15%;
+  width: 70%;
+  height: 0.5rem;
+  content: '';
+  border-radius: 50%;
+  background: rgba(54, 45, 89, 0.25);
+  filter: blur(3px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .authMark {
+    animation: authFloat 4s ease-in-out infinite;
+  }
+  .authMark::after {
+    animation: authShadow 4s ease-in-out infinite;
+  }
+}
+@keyframes authFloat {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-6deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(3deg);
+  }
+}
+@keyframes authShadow {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(6px) scale(0.8);
+    opacity: 0.45;
+  }
 }
 .authMark svg {
   width: 1.75rem;
@@ -737,7 +791,7 @@ textarea::placeholder {
 
 /* The overview is real text and CSS, never a raster title image. */
 .overviewHero {
-  padding: clamp(2.5rem, 8vw, 6rem) 1rem;
+  padding: clamp(1.5rem, 4vw, 3rem) 1rem;
   margin-bottom: 2rem;
   text-align: center;
   border-bottom: 1px solid var(--border-strong);
@@ -768,22 +822,29 @@ textarea::placeholder {
 }
 .eventGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
 }
 .eventCard {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.65fr);
   min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--border-strong);
-  border-radius: 1rem;
-  background: var(--surface-raised);
+  gap: 0;
+}
+.eventCard::after {
+  display: block;
+  grid-column: 1 / -1;
+  height: 16px;
+  margin-top: 2rem;
+  content: '';
+  background: url('../assets/svgs/divider-squiggle.svg') repeat-x left center / auto 16px;
+  opacity: 0.85;
 }
 .eventCardHero {
   display: flex;
   align-items: center;
-  min-height: 12rem;
+  min-height: 10rem;
+  border-radius: 0.85rem;
   padding: clamp(1.5rem, 3vw, 2.5rem);
   color: #fff;
   background: #362d59;
@@ -2126,6 +2187,12 @@ kbd {
   }
 }
 @media (max-width: 560px) {
+  .eventCard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .eventCardBody {
+    padding: 1.25rem 0;
+  }
   .masthead {
     grid-template-columns: 1fr;
     gap: 0.5rem;

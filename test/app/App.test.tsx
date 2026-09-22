@@ -34,6 +34,10 @@ describe('App', () => {
     expect(
       screen.getAllByRole('link', {name: 'Upload & submissions'})[0],
     ).toHaveAttribute('href', '/events/october');
+    expect(screen.queryByText('Made at Sentry')).not.toBeInTheDocument();
+    const credit = screen.getByRole('link', {name: 'made by Junior'});
+    expect(credit).toHaveAttribute('href', 'https://junior.sentry.dev/');
+    expect(credit.querySelector('img')).toHaveAttribute('src', '/junior-mark.svg');
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
     expect(fetcher.mock.calls.map(([url]) => url)).not.toContain('/api/events/october');
     fireEvent.click(screen.getByRole('button', {name: 'New playlist'}));
@@ -218,6 +222,12 @@ describe('App', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, {status: 401})));
     render(<App />);
     expect(await screen.findByRole('heading', {name: 'Show & Tell'})).toBeInTheDocument();
+    expect(screen.queryByText('Sentry internal')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Sign in with your Sentry Google account to watch and share demo videos.',
+      ),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('link', {name: 'Continue with Google'})).toHaveAttribute(
       'href',
       '/api/auth/login',
