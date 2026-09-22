@@ -58,6 +58,16 @@ The verification gate generates Cloudflare binding types, typechecks, checks for
 
 Google OAuth uses Authorization Code with PKCE, state and nonce verification, exact verified `@sentry.io` enforcement, hashed opaque D1 sessions, and HttpOnly cookies. Authenticated mutations require the exact same-origin `Origin` header.
 
+## Overview and admin/user views
+
+The home page lists shows as text-and-CSS cards with a prominent **Watch playlist** link and a smaller **Upload & submissions** link. It does not automatically open a show. Admins can expand **New playlist** on the overview; its title defaults to `Show & Tell {Month} - {Year}` using the browser's current local month. Creating it adds it to the list and opens its submission page.
+
+Share `/events/<event-id>` for submissions or `/playlists/<event-id>` for screening. Both destinations survive Google sign-in through the same browser-bound, allowlisted OAuth flow. The submission page has **Copy submission link**; the player has **Copy playlist link**. Legacy `/?event=<event-id>` links still open the submission page and normalize to the new path for sign-in.
+
+Like Hack Week, admins can **Switch to user view** / **Back to admin** in the header. Migration `0006_session_view_mode.sql` adds a per-session preference; it does not change `users.is_admin`. The Worker enforces the effective member role for visibility, counts, uploads, moderation and creation—not just the UI. Another browser session is unaffected; demotion still takes effect on the next request. Switching views resets page data and stops active media/uploads, avoiding stale admin-only content. Submission bylines use the creator's current Google profile photo with an initials fallback.
+
+**Rollout:** this polish PR adds one backward-compatible D1 column and deploys the Worker/frontend. No new resources or credentials. Production migration/deployment still require explicit approval; local verification does not apply them remotely. The API/plugin/transcript idea in #4 remains deferred.
+
 ## Submissions and video uploads
 
 Playlists and submissions need only a title and optional description. For dated events, use a title such as `Show & Tell — October 2026`. Project links are no longer accepted as a required field or exposed in the API/UI. Migration `0004_remove_project_url.sql` drops the unused `project_url` column and permanently discards its old values. Submission records and video relationships are preserved; no compatibility placeholder remains.

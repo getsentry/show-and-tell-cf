@@ -411,6 +411,7 @@ describe('R2 multipart video lifecycle', () => {
       displayName: 'Show & Tell member',
       avatarUrl: null,
       role: 'member' as const,
+      actualRole: 'member' as const,
     };
 
     const completing = completeVideoUpload(

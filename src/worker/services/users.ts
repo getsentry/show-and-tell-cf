@@ -98,6 +98,7 @@ function toSessionUser(row: UserRow): SessionUser {
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
     role,
+    actualRole: role,
   };
 }
 

@@ -203,6 +203,10 @@ describe('canonical redirect and shared login destinations', () => {
   });
   it.each([
     '/playlists/event',
+    '/events/event',
+    '/events/../api/auth/logout',
+    '/events/%2f%2fevil.test',
+    '/events/event?returnTo=https://evil.test',
     '//evil.test',
     'https://evil.test',
     '/\\evil.test',
@@ -221,7 +225,9 @@ describe('canonical redirect and shared login destinations', () => {
       )
         .bind(await sha256Hex(state))
         .first<{return_to: string}>();
-      expect(row?.return_to).toBe(returnTo === '/playlists/event' ? returnTo : '/');
+      expect(row?.return_to).toBe(
+        ['/playlists/event', '/events/event'].includes(returnTo) ? returnTo : '/',
+      );
       // D1's consumption trigger must preserve RETURNING for the destination too.
       const consumed = await env.DB.prepare(
         'UPDATE oauth_login_attempts SET consumed_at = created_at WHERE state_hash = ? RETURNING return_to',

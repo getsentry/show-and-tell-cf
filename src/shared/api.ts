@@ -18,6 +18,7 @@ export interface SessionUser {
   displayName: string;
   avatarUrl: string | null;
   role: UserRole;
+  actualRole: UserRole;
 }
 export interface SessionResponse {
   user: SessionUser;

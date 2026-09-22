@@ -11,6 +11,7 @@ export interface Submission {
   eventId: string;
   creatorId: string;
   creatorName: string;
+  creatorAvatarUrl: string | null;
   title: string;
   description: string | null;
   hidden: boolean;

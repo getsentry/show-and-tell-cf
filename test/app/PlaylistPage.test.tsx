@@ -14,6 +14,7 @@ const viewer: SessionUser = {
   email: 'u@sentry.io',
   displayName: 'Viewer',
   role: 'member',
+  actualRole: 'member',
   avatarUrl: null,
 };
 const playlist: PlaylistResponse = {
@@ -176,12 +177,33 @@ describe('playlist page', () => {
   });
 });
 
+describe('submission sharing', () => {
+  it('copies a submission link and offers a fallback when clipboard access fails', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', {clipboard: {writeText}});
+    render(<SharePlaylist eventId="event" kind="submission" />);
+    fireEvent.click(screen.getByRole('button', {name: 'Copy submission link'}));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/events/event`),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Link copied');
+    writeText.mockRejectedValue(new Error('denied'));
+    fireEvent.click(screen.getByRole('button', {name: 'Copy submission link'}));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        `Copy this link: ${window.location.origin}/events/event`,
+      ),
+    );
+  });
+});
+
 describe('admin ordering controls', () => {
   const submissions: Submission[] = ['a', 'b'].map((id) => ({
     id,
     eventId: 'event',
     creatorId: 'u',
     creatorName: 'User',
+    creatorAvatarUrl: null,
     title: id,
     description: null,
     hidden: false,

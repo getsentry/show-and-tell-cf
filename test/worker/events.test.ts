@@ -19,6 +19,42 @@ beforeEach(async () => {
 });
 
 describe('events and submissions', () => {
+  it('includes the current creator avatar on create, detail and visibility responses', async () => {
+    const admin = await userCookie('admin', true);
+    const eventId = await createEvent(admin.cookie);
+    await env.DB.prepare('UPDATE users SET avatar_url = ? WHERE id = ?')
+      .bind('https://example.test/avatar.jpg', admin.id)
+      .run();
+    const created = await request(
+      `/api/events/${eventId}/submissions`,
+      admin.cookie,
+      'POST',
+      {title: 'Demo'},
+    );
+    const {submission} = await created.json<{
+      submission: {id: string; creatorAvatarUrl: string | null};
+    }>();
+    expect(submission.creatorAvatarUrl).toBe('https://example.test/avatar.jpg');
+    expect(
+      await (await request(`/api/events/${eventId}`, admin.cookie, 'GET')).json(),
+    ).toMatchObject({
+      submissions: [{creatorAvatarUrl: 'https://example.test/avatar.jpg'}],
+    });
+    await env.DB.prepare('UPDATE users SET avatar_url = NULL WHERE id = ?')
+      .bind(admin.id)
+      .run();
+    expect(
+      await (
+        await request(
+          `/api/events/${eventId}/submissions/${submission.id}/visibility`,
+          admin.cookie,
+          'POST',
+          {hidden: true},
+        )
+      ).json(),
+    ).toMatchObject({submission: {creatorAvatarUrl: null}});
+  });
+
   it('accepts only a title with no project link column or response field', async () => {
     const admin = await userCookie('admin', true);
     const eventResponse = await request('/api/events', admin.cookie, 'POST', {

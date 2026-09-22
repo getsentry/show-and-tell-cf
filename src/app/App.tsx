@@ -8,7 +8,7 @@ import type {
   Submission,
 } from '../shared/events';
 import {isJsonObject, isJsonString, type JsonInput} from '../shared/json';
-import {playlistPath, safeReturnTo} from '../shared/playlist';
+import {playlistPath, submissionPath, safeReturnTo} from '../shared/playlist';
 import {api, json} from './api';
 import {AppFrame} from './components/AppFrame';
 import {Avatar} from './components/Avatar';
@@ -40,17 +40,42 @@ export function App() {
   if (user === undefined) return <Loading />;
   if (user === null) return <SignIn authError={authError} />;
   const path = safeReturnTo(window.location.pathname);
-  if (path !== '/')
-    return <PlaylistPage eventId={path.slice('/playlists/'.length)} user={user} />;
-  return <ShowAndTell user={user} />;
+  if (path.startsWith('/playlists/'))
+    return (
+      <PlaylistPage
+        key={user.role}
+        eventId={path.slice('/playlists/'.length)}
+        user={user}
+        onViewModeChange={setUser}
+      />
+    );
+  // Discard cached admin-only data (and stop media/uploads) when changing views.
+  return <ShowAndTell key={user.role} user={user} onViewModeChange={setUser} />;
 }
 
-function ShowAndTell({user}: {user: SessionUser}) {
+function currentEventId() {
+  const path = safeReturnTo(window.location.pathname);
+  if (path.startsWith('/events/')) return path.slice('/events/'.length);
+  const legacy = new URLSearchParams(window.location.search).get('event');
+  return legacy && safeReturnTo(`/events/${legacy}`) !== '/' ? legacy : null;
+}
+
+export function defaultPlaylistTitle(now = new Date()) {
+  const month = now.toLocaleString('en-US', {month: 'long'});
+  return `Show & Tell ${month} - ${now.getFullYear()}`;
+}
+
+function ShowAndTell({
+  user,
+  onViewModeChange,
+}: {
+  user: SessionUser;
+  onViewModeChange: (user: SessionUser) => void;
+}) {
   const [events, setEvents] = useState<ShowAndTellEvent[]>([]);
   const [eventsLoaded, setEventsLoaded] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(() =>
-    new URLSearchParams(window.location.search).get('event'),
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(currentEventId);
+  const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
@@ -66,13 +91,24 @@ function ShowAndTell({user}: {user: SessionUser}) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [createdSubmission, setCreatedSubmission] = useState<Submission | null>(null);
   const admin = user.role === 'admin';
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
-  const selectEvent = useCallback((eventId: string | null) => {
+  const selectEvent = useCallback((eventId: string | null, push = true) => {
     if (eventId !== selectedIdRef.current) {
       setFailedSelection(null);
       setSelectionError(null);
     }
     setDeleteId(null);
+    setMutationError(null);
+    const destination = eventId ? submissionPath(eventId) : '/';
+    if (push && `${window.location.pathname}${window.location.search}` !== destination)
+      window.history.pushState(null, '', destination);
     selectedIdRef.current = eventId;
     setSelectedId(eventId);
   }, []);
@@ -82,13 +118,17 @@ function ShowAndTell({user}: {user: SessionUser}) {
       const result = await api<EventsResponse>('/events');
       if (request !== eventsRequest.current) return;
       setEvents(result.events);
-      if (!selectedIdRef.current) selectEvent(result.events[0]?.id ?? null);
       setEventsLoaded(true);
       setEventsError(null);
     } catch (cause) {
       if (request !== eventsRequest.current) return;
       setEventsError(cause instanceof Error ? cause.message : 'Request failed');
     }
+  }, []);
+  useEffect(() => {
+    const onPopState = () => selectEvent(currentEventId(), false);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
   }, [selectEvent]);
   useEffect(() => {
     void loadEvents();
@@ -147,7 +187,11 @@ function ShowAndTell({user}: {user: SessionUser}) {
           description: data.get('description'),
         }),
       );
+      // A view switch unmounts this editor. A late create must not change the
+      // replacement view's URL or trigger refreshes with the new session role.
+      if (!mounted.current) return;
       form.reset();
+      setShowCreate(false);
       // Keep the new playlist usable even if refreshing the list fails.
       setEvents((current) => [
         result.event,
@@ -218,7 +262,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
 
   const errors = [eventsError, selectionError, mutationError].filter(Boolean);
   return (
-    <AppFrame user={user} section="playlists">
+    <AppFrame user={user} section="playlists" onViewModeChange={onViewModeChange}>
       <main className="homePage">
         {errors.length ? (
           <div className="noticeBar" role="alert">
@@ -228,12 +272,125 @@ function ShowAndTell({user}: {user: SessionUser}) {
             ) : null}
           </div>
         ) : null}
-        <section
-          className={admin ? 'playlistsBar playlistsBar--admin' : 'playlistsBar'}
-          aria-label="Playlists"
-        >
-          <div className="playlistStrip">
-            <p className="kicker">Playlists</p>
+        {!selectedId ? (
+          <>
+            <header className="overviewHero">
+              <p className="kicker">Made at Sentry</p>
+              <h1>
+                Show <span>&amp;</span> Tell
+              </h1>
+            </header>
+            <section className="overviewSection" aria-label="Show & Tell playlists">
+              <div className="overviewHeading">
+                <h2>The shows</h2>
+                {admin ? (
+                  <button
+                    className="textAction"
+                    aria-expanded={showCreate}
+                    aria-controls="new-playlist"
+                    onClick={() => setShowCreate(!showCreate)}
+                  >
+                    {showCreate ? 'Cancel new playlist' : 'New playlist'}
+                  </button>
+                ) : null}
+              </div>
+              {admin && showCreate ? (
+                <form
+                  id="new-playlist"
+                  className="newPlaylist"
+                  aria-label="Create playlist"
+                  onSubmit={(event) => reportFailure(createEvent(event))}
+                >
+                  <label>
+                    Title
+                    <input
+                      name="title"
+                      maxLength={120}
+                      defaultValue={defaultPlaylistTitle()}
+                      disabled={creatingEvent}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Description (optional)
+                    <textarea
+                      name="description"
+                      rows={2}
+                      maxLength={1000}
+                      disabled={creatingEvent}
+                    />
+                  </label>
+                  <button
+                    className="primaryAction"
+                    type="submit"
+                    disabled={creatingEvent}
+                  >
+                    {creatingEvent ? 'Creating…' : 'Create playlist'}
+                  </button>
+                </form>
+              ) : null}
+              <div className="eventGrid">
+                {events.map((event) => (
+                  <article className="eventCard" key={event.id} aria-label={event.title}>
+                    <div className="eventCardHero">
+                      <h3>{event.title}</h3>
+                    </div>
+                    <div className="eventCardBody">
+                      {event.description ? <p>{event.description}</p> : null}
+                      <p className="eventCount">
+                        {event.submissionCount}{' '}
+                        {event.submissionCount === 1 ? 'submission' : 'submissions'}
+                      </p>
+                      <a
+                        className="primaryAction primaryAction--play"
+                        href={playlistPath(event.id)}
+                      >
+                        Watch playlist
+                      </a>
+                      <a
+                        className="submissionLink"
+                        href={submissionPath(event.id)}
+                        onClick={(click) => {
+                          if (
+                            click.button !== 0 ||
+                            click.metaKey ||
+                            click.ctrlKey ||
+                            click.shiftKey ||
+                            click.altKey
+                          )
+                            return;
+                          click.preventDefault();
+                          selectEvent(event.id);
+                        }}
+                      >
+                        Upload &amp; submissions
+                      </a>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </>
+        ) : (
+          <section className="playlistsBar" aria-label="Playlists">
+            <a
+              className="backLink"
+              href="/"
+              onClick={(click) => {
+                if (
+                  click.button !== 0 ||
+                  click.metaKey ||
+                  click.ctrlKey ||
+                  click.shiftKey ||
+                  click.altKey
+                )
+                  return;
+                click.preventDefault();
+                selectEvent(null);
+              }}
+            >
+              ← All shows
+            </a>
             <div className="playlistPills">
               {events.map((event) => (
                 <button
@@ -251,45 +408,9 @@ function ShowAndTell({user}: {user: SessionUser}) {
                   </span>
                 </button>
               ))}
-              {eventsLoaded && !events.length ? (
-                <span className="playlistPill playlistPill--empty">
-                  Nothing scheduled yet
-                </span>
-              ) : null}
             </div>
-          </div>
-          {admin ? (
-            <form
-              className="newPlaylist"
-              aria-label="Create playlist"
-              onSubmit={(event) => reportFailure(createEvent(event))}
-            >
-              <p className="kicker">New Show &amp; Tell</p>
-              <label>
-                Title
-                <input
-                  name="title"
-                  maxLength={120}
-                  placeholder="Show & Tell — October 2026"
-                  disabled={creatingEvent}
-                  required
-                />
-              </label>
-              <label>
-                Description (optional)
-                <textarea
-                  name="description"
-                  rows={2}
-                  maxLength={1000}
-                  disabled={creatingEvent}
-                />
-              </label>
-              <button className="primaryAction" type="submit" disabled={creatingEvent}>
-                {creatingEvent ? 'Creating…' : 'Create playlist'}
-              </button>
-            </form>
-          ) : null}
-        </section>
+          </section>
+        )}
         {failedSelection === selectedId && selectedId ? (
           <section className="emptyState">
             <span>!</span>
@@ -317,6 +438,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
                   Open the screening
                 </a>
                 <SharePlaylist
+                  kind="submission"
                   key={visibleSelection.event.id}
                   eventId={visibleSelection.event.id}
                 />
@@ -410,6 +532,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
                           <div className="submissionByline">
                             <Avatar
                               name={submission.creatorName}
+                              avatarUrl={submission.creatorAvatarUrl}
                               className="submissionAvatar"
                             />
                             <span>{submission.creatorName}</span>
@@ -482,7 +605,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
             <Loader />
             <p>Loading playlist…</p>
           </div>
-        ) : (
+        ) : events.length ? null : (
           <section className="emptyState">
             <span>00</span>
             <h2>No Show &amp; Tell playlists yet.</h2>
@@ -512,7 +635,10 @@ function Loading() {
 }
 
 function SignIn({authError}: {authError: string | null}) {
-  const returnTo = safeReturnTo(window.location.pathname);
+  const eventId = currentEventId();
+  const returnTo = eventId
+    ? submissionPath(eventId)
+    : safeReturnTo(window.location.pathname);
   return (
     <main className="authShell">
       <ThemeToggle className="authThemeToggle" />
@@ -559,7 +685,8 @@ function parseSession(value: JsonInput): SessionUser | null {
     !isJsonString(user.email) ||
     !isJsonString(user.displayName) ||
     (user.avatarUrl !== null && !isJsonString(user.avatarUrl)) ||
-    (user.role !== 'member' && user.role !== 'admin')
+    (user.role !== 'member' && user.role !== 'admin') ||
+    (user.actualRole !== 'member' && user.actualRole !== 'admin')
   )
     return null;
   return {
@@ -568,5 +695,6 @@ function parseSession(value: JsonInput): SessionUser | null {
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
     role: user.role,
+    actualRole: user.actualRole,
   };
 }
