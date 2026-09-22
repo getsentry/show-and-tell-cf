@@ -82,12 +82,10 @@ eventRoutes.post('/:eventId/submissions', async (c) => {
     return notFound(c);
   const input = parseSubmission(await readJson(c.req.raw));
   const id = crypto.randomUUID();
-  // Keep the legacy NOT NULL column populated until a later cleanup migration.
-  // It is no longer read or exposed; retaining it keeps rolling deploys compatible.
   await c.env.DB.prepare(
     `INSERT INTO submissions
-      (id, event_id, creator_id, title, description, project_url)
-     VALUES (?, ?, ?, ?, ?, '-')`,
+      (id, event_id, creator_id, title, description)
+     VALUES (?, ?, ?, ?, ?)`,
   )
     .bind(id, eventId, c.get('user').id, input.title, input.description)
     .run();

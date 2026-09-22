@@ -58,7 +58,7 @@ Google OAuth uses Authorization Code with PKCE, state and nonce verification, ex
 
 ## Submissions and video uploads
 
-Playlists and submissions need only a title and optional description. For dated events, use a title such as `Show & Tell — October 2026`. Project links are no longer accepted as a required field or exposed in the API/UI. The unused legacy database column is retained (new rows use an inert `-` value) to avoid a destructive migration; existing entries and videos are unchanged.
+Playlists and submissions need only a title and optional description. For dated events, use a title such as `Show & Tell — October 2026`. Project links are no longer accepted as a required field or exposed in the API/UI. Migration `0004_remove_project_url.sql` drops the unused `project_url` column and permanently discards its old values. Submission records and video relationships are preserved; no compatibility placeholder remains.
 
 Create a submission first, then use **Choose video → Upload video** on its card. The browser uploads 50 MiB parts and shows saved-byte progress. Pause/resume, retry interrupted uploads, or discard an unfinished upload without deleting the submission. Reloading/switching playlists pauses transfers; reselect the **original, unchanged file** to resume. Completed parts and active upload discovery live on the server, including recovery when a create response is lost. The browser remembers `lastModified` when storage is available to catch accidental file revisions; this is a convenience check, not a content hash.
 
@@ -93,7 +93,7 @@ All paths below start with `/api`; all writes require the same-origin `Origin` h
 
 ### Production rollout and smoke test
 
-Main automatically deploys through Workers Builds. The video infrastructure was approved and deployed with PR #5; the upload UI needs no new bindings, secrets, or D1 migrations. Additional Cloudflare writes still require explicit approval.
+Main automatically deploys through Workers Builds. The video infrastructure was approved and deployed with PR #5; the upload UI needs no new bindings or secrets. Migration `0004_remove_project_url.sql` runs on deployment and permanently removes stored project URLs. The previously deployed Worker requires this column, so event-detail reads and submission creation can fail between migration and Worker deployment; roll forward to this PR's Worker rather than rolling back to the old code. Additional Cloudflare writes still require explicit approval.
 
 1. For a new environment, approve and create the private R2 bucket `show-and-tell-videos-production` in Sentry Internal. Keep public access disabled; same-origin Worker uploads do not need R2 CORS or S3 credentials.
 2. Verify the Workers Builds token can deploy Workers, D1 migrations, Workflows, Containers/images, and R2 bindings. Container deployment needs Docker in the build environment. Do not paste tokens into Slack or the repository.

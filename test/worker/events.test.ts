@@ -19,7 +19,7 @@ beforeEach(async () => {
 });
 
 describe('events and submissions', () => {
-  it('accepts only a title and omits project links from responses, including legacy rows', async () => {
+  it('accepts only a title with no project link column or response field', async () => {
     const admin = await userCookie('admin', true);
     const eventResponse = await request('/api/events', admin.cookie, 'POST', {
       title: 'Show & Tell — October 2026',
@@ -38,20 +38,14 @@ describe('events and submissions', () => {
     }>();
     expect(body.submission.description).toBeNull();
     expect(body.submission).not.toHaveProperty('projectUrl');
-    // Existing user data is preserved, but the obsolete link is not exposed.
-    await env.DB.prepare('UPDATE submissions SET project_url = ? WHERE id = ?')
-      .bind('https://example.com/old', body.submission.id)
-      .run();
     const detail = await request(`/api/events/${event.id}`, admin.cookie, 'GET');
     expect(await detail.json()).toMatchObject({
       submissions: [{id: body.submission.id, title: 'My demo'}],
     });
-    const legacy = await env.DB.prepare(
-      'SELECT project_url FROM submissions WHERE id = ?',
-    )
-      .bind(body.submission.id)
-      .first<{project_url: string}>();
-    expect(legacy?.project_url).toBe('https://example.com/old');
+    const columns = await env.DB.prepare('PRAGMA table_info(submissions)').all<{
+      name: string;
+    }>();
+    expect(columns.results.map((column) => column.name)).not.toContain('project_url');
   });
 
   it('lets admins create events and members create durable submissions', async () => {
