@@ -44,7 +44,11 @@ export function PlaylistOrder({
         Changes save immediately. Hidden and unfinished submissions keep their place but
         do not play.
       </p>
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? (
+        <p className="inlineError" role="alert">
+          {error}
+        </p>
+      ) : null}
       <ol>
         {submissions.map((entry, index) => (
           <li key={entry.id}>
@@ -69,7 +73,11 @@ export function PlaylistOrder({
           </li>
         ))}
       </ol>
-      {busy ? <p role="status">Saving order…</p> : null}
+      {busy ? (
+        <p className="formHint" role="status">
+          Saving order…
+        </p>
+      ) : null}
     </details>
   );
 }

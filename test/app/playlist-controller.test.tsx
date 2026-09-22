@@ -19,23 +19,33 @@ const playback = (id: string): PlaybackResponse => ({
   expiresAt: null,
 });
 const players: Array<ReturnType<typeof createPlaylistController>> = [];
+const play = vi.fn<() => Promise<void>>();
 beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
-  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+  play.mockReset().mockResolvedValue();
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(play);
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
 });
 afterEach(() => {
   players.splice(0).forEach((p) => p.destroy());
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
-function setup(getPlayback = vi.fn(async (id: string) => playback(id))) {
+function setup(
+  getPlayback = vi.fn(async (id: string) => playback(id)),
+  titleDurationMs = 0,
+) {
   const elements: [HTMLVideoElement, HTMLVideoElement] = [
     document.createElement('video'),
     document.createElement('video'),
   ];
   const states: PlayerState[] = [];
-  const player = createPlaylistController(items, elements, getPlayback, (state) =>
-    states.push(state),
+  const player = createPlaylistController(
+    items,
+    elements,
+    getPlayback,
+    (state) => states.push(state),
+    {titleDurationMs},
   );
   players.push(player);
   return {player, elements, getPlayback, states, state: () => states.at(-1)!};
@@ -281,5 +291,97 @@ describe('two-buffer playlist controller', () => {
     hidden = true;
     await player.next();
     expect(state()).toMatchObject({phase: 'error', index: 1, error: 'Hidden'});
+  });
+});
+
+describe('title cards and playback controls', () => {
+  it('announces each clip on a countdown title card while preloading the next one', async () => {
+    vi.useFakeTimers();
+    const {player, elements, getPlayback, state} = setup(undefined, 5_000);
+    await player.jump(0);
+    await flush();
+    expect(state()).toMatchObject({phase: 'title', index: 0, countdownSeconds: 5});
+    expect(elements[0].src).toContain('/a/content');
+    expect(elements[1].src).toContain('/b/content');
+    expect(getPlayback.mock.calls.map(([id]) => id)).toEqual(['a', 'b']);
+    expect(play).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(state().countdownSeconds).toBe(4);
+    await vi.advanceTimersByTimeAsync(3_800);
+    expect(state().phase).toBe('title');
+    await vi.advanceTimersByTimeAsync(200);
+    expect(state()).toMatchObject({phase: 'playing', index: 0, countdownSeconds: null});
+    expect(play).toHaveBeenCalledOnce();
+    // The next clip was preloaded during the title card; no duplicate request.
+    expect(getPlayback.mock.calls.map(([id]) => id)).toEqual(['a', 'b']);
+    elements[0].dispatchEvent(new Event('ended'));
+    await flush();
+    expect(state()).toMatchObject({phase: 'title', index: 1, countdownSeconds: 5});
+  });
+  it('skips the countdown on toggle and cancels it on navigation', async () => {
+    vi.useFakeTimers();
+    const {player, state} = setup(undefined, 5_000);
+    await player.jump(0);
+    await player.toggle();
+    expect(state()).toMatchObject({phase: 'playing', index: 0, countdownSeconds: null});
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(play).toHaveBeenCalledOnce();
+    await player.next();
+    expect(state()).toMatchObject({phase: 'title', index: 1});
+    await player.jump(2);
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(state()).toMatchObject({phase: 'playing', index: 2});
+    // One play for the skipped card, one for clip c.
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+  it('fails from the title card when the announced source cannot load', async () => {
+    vi.useFakeTimers();
+    const {player, elements, state} = setup(undefined, 5_000);
+    await player.jump(0);
+    elements[0].dispatchEvent(new Event('error'));
+    expect(state()).toMatchObject({phase: 'error', countdownSeconds: null});
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(state().phase).toBe('error');
+    expect(play).not.toHaveBeenCalled();
+  });
+  it('ignores next before the first play and after the wrap card', async () => {
+    const {player, states, getPlayback, state} = setup();
+    await player.next();
+    expect(states).toHaveLength(0);
+    expect(getPlayback).not.toHaveBeenCalled();
+    await player.jump(2);
+    await player.next();
+    expect(state().phase).toBe('complete');
+    await player.next();
+    expect(state()).toMatchObject({phase: 'complete', index: 2});
+    expect(getPlayback.mock.calls.map(([id]) => id)).toEqual(['c']);
+  });
+  it('reports progress, seeks, and applies speed and mute to both slots', async () => {
+    const {player, elements, state} = setup();
+    await player.jump(0);
+    Object.defineProperty(elements[0], 'duration', {value: 42, configurable: true});
+    elements[0].dispatchEvent(new Event('durationchange'));
+    expect(state().durationSeconds).toBe(42);
+    elements[0].currentTime = 10;
+    elements[0].dispatchEvent(new Event('timeupdate'));
+    expect(state().currentTime).toBe(10);
+    elements[1].currentTime = 3;
+    elements[1].dispatchEvent(new Event('timeupdate'));
+    expect(state().currentTime).toBe(10);
+    player.seek(99);
+    expect(elements[0].currentTime).toBe(42);
+    expect(state().currentTime).toBe(42);
+    player.setPlaybackRate(1.5);
+    player.setMuted(true);
+    expect([elements[0].playbackRate, elements[1].playbackRate]).toEqual([1.5, 1.5]);
+    expect([elements[0].muted, elements[1].muted]).toEqual([true, true]);
+    expect(state()).toMatchObject({playbackRate: 1.5, muted: true});
+    await player.next();
+    expect(state()).toMatchObject({
+      index: 1,
+      playbackRate: 1.5,
+      muted: true,
+      currentTime: 0,
+    });
   });
 });

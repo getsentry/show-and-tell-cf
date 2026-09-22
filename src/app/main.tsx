@@ -1,5 +1,3 @@
-import '@fontsource/rubik/400.css';
-import '@fontsource/rubik/600.css';
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 

@@ -8,11 +8,17 @@ import type {
   Submission,
 } from '../shared/events';
 import {isJsonObject, isJsonString, type JsonInput} from '../shared/json';
-import {api, json} from './api';
-import {VideoPanel} from './VideoPanel';
-import {PlaylistPage, SharePlaylist} from './PlaylistPage';
-import {PlaylistOrder} from './PlaylistOrder';
 import {playlistPath, safeReturnTo} from '../shared/playlist';
+import {api, json} from './api';
+import {AppFrame} from './components/AppFrame';
+import {Avatar} from './components/Avatar';
+import {GoogleIcon} from './components/GoogleIcon';
+import {Loader} from './components/Loader';
+import {SentrySymbol} from './components/SentrySymbol';
+import {ThemeToggle} from './components/ThemeToggle';
+import {PlaylistOrder} from './PlaylistOrder';
+import {PlaylistPage, SharePlaylist} from './PlaylistPage';
+import {VideoPanel} from './VideoPanel';
 
 export function App() {
   const [user, setUser] = useState<SessionUser | null | undefined>();
@@ -34,7 +40,8 @@ export function App() {
   if (user === undefined) return <Loading />;
   if (user === null) return <SignIn authError={authError} />;
   const path = safeReturnTo(window.location.pathname);
-  if (path !== '/') return <PlaylistPage eventId={path.slice('/playlists/'.length)} />;
+  if (path !== '/')
+    return <PlaylistPage eventId={path.slice('/playlists/'.length)} user={user} />;
   return <ShowAndTell user={user} />;
 }
 
@@ -58,6 +65,7 @@ function ShowAndTell({user}: {user: SessionUser}) {
   const submissionPending = useRef(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [createdSubmission, setCreatedSubmission] = useState<Submission | null>(null);
+  const admin = user.role === 'admin';
 
   const selectEvent = useCallback((eventId: string | null) => {
     if (eventId !== selectedIdRef.current) {
@@ -208,51 +216,55 @@ function ShowAndTell({user}: {user: SessionUser}) {
     }
   }, [createdSubmission, selectedId, visibleSelection]);
 
+  const errors = [eventsError, selectionError, mutationError].filter(Boolean);
   return (
-    <main className="appShell">
-      <header className="topbar">
-        <a className="brand" href="/">
-          Show &amp; Tell
-        </a>
-        <span>
-          {user.displayName} · {user.role}
-        </span>
-        <form method="post" action="/api/auth/logout">
-          <button type="submit">Sign out</button>
-        </form>
-      </header>
-      {eventsError || selectionError || mutationError ? (
-        <div className="authError" role="alert">
-          <p>
-            {[eventsError, selectionError, mutationError].filter(Boolean).join(' · ')}
-          </p>
-          {eventsError ? <button onClick={() => void loadEvents()}>Retry</button> : null}
-        </div>
-      ) : null}
-      <div className="workspace">
-        <aside className="eventRail">
-          <p className="eyebrow">Playlists</p>
-          {events.map((event) => (
-            <button
-              className={event.id === selectedId ? 'eventButton active' : 'eventButton'}
-              key={event.id}
-              aria-current={event.id === selectedId ? 'true' : undefined}
-              onClick={() => selectEvent(event.id)}
-            >
-              <strong>{event.title}</strong>
-              <span>
-                {event.submissionCount}{' '}
-                {event.submissionCount === 1 ? 'submission' : 'submissions'}
-              </span>
-            </button>
-          ))}
-          {user.role === 'admin' ? (
+    <AppFrame user={user} section="playlists">
+      <main className="homePage">
+        {errors.length ? (
+          <div className="noticeBar" role="alert">
+            <p>{errors.join(' · ')}</p>
+            {eventsError ? (
+              <button onClick={() => void loadEvents()}>Retry</button>
+            ) : null}
+          </div>
+        ) : null}
+        <section
+          className={admin ? 'playlistsBar playlistsBar--admin' : 'playlistsBar'}
+          aria-label="Playlists"
+        >
+          <div className="playlistStrip">
+            <p className="kicker">Playlists</p>
+            <div className="playlistPills">
+              {events.map((event) => (
+                <button
+                  className={
+                    event.id === selectedId ? 'playlistPill active' : 'playlistPill'
+                  }
+                  key={event.id}
+                  aria-current={event.id === selectedId ? 'true' : undefined}
+                  onClick={() => selectEvent(event.id)}
+                >
+                  <strong>{event.title}</strong>
+                  <span>
+                    {event.submissionCount}{' '}
+                    {event.submissionCount === 1 ? 'submission' : 'submissions'}
+                  </span>
+                </button>
+              ))}
+              {eventsLoaded && !events.length ? (
+                <span className="playlistPill playlistPill--empty">
+                  Nothing scheduled yet
+                </span>
+              ) : null}
+            </div>
+          </div>
+          {admin ? (
             <form
-              className="stackedForm"
+              className="newPlaylist"
               aria-label="Create playlist"
               onSubmit={(event) => reportFailure(createEvent(event))}
             >
-              <h2>New Show &amp; Tell</h2>
+              <p className="kicker">New Show &amp; Tell</p>
               <label>
                 Title
                 <input
@@ -265,66 +277,80 @@ function ShowAndTell({user}: {user: SessionUser}) {
               </label>
               <label>
                 Description (optional)
-                <textarea name="description" maxLength={1000} disabled={creatingEvent} />
+                <textarea
+                  name="description"
+                  rows={2}
+                  maxLength={1000}
+                  disabled={creatingEvent}
+                />
               </label>
               <button className="primaryAction" type="submit" disabled={creatingEvent}>
                 {creatingEvent ? 'Creating…' : 'Create playlist'}
               </button>
             </form>
           ) : null}
-        </aside>
-        <section className="eventContent">
-          {failedSelection === selectedId && selectedId ? (
-            <div className="emptyState">
-              <p>Could not load this playlist.</p>
-              <button onClick={() => requestSelected(selectedId)}>Retry</button>
-            </div>
-          ) : visibleSelection ? (
-            <>
-              <header className="eventHeader">
-                <p className="eyebrow">Company playlist</p>
+        </section>
+        {failedSelection === selectedId && selectedId ? (
+          <section className="emptyState">
+            <span>!</span>
+            <h2>Could not load this playlist.</h2>
+            <p>Something went wrong while fetching the submissions.</p>
+            <button className="textAction" onClick={() => requestSelected(selectedId)}>
+              Retry
+            </button>
+          </section>
+        ) : visibleSelection ? (
+          <>
+            <header className="playlistHero pageHeader">
+              <div className="playlistHeroCopy">
+                <p className="kicker">Show &amp; Tell playlist</p>
                 <h1>{visibleSelection.event.title}</h1>
                 {visibleSelection.event.description ? (
                   <p>{visibleSelection.event.description}</p>
                 ) : null}
-              </header>
-              <div className="playlistActions">
+              </div>
+              <div className="playlistHeroActions">
                 <a
-                  className="primaryAction"
+                  className="primaryAction primaryAction--play"
                   href={playlistPath(visibleSelection.event.id)}
                 >
-                  Open playlist player
+                  Open the screening
                 </a>
                 <SharePlaylist
                   key={visibleSelection.event.id}
                   eventId={visibleSelection.event.id}
                 />
               </div>
-              {user.role === 'admin' && visibleSelection.submissions.length > 1 ? (
-                <PlaylistOrder
-                  key={visibleSelection.event.id}
-                  eventId={visibleSelection.event.id}
-                  submissions={visibleSelection.submissions}
-                  onOrdered={() => requestSelected(visibleSelection.event.id)}
-                />
-              ) : null}
+            </header>
+            {admin && visibleSelection.submissions.length > 1 ? (
+              <PlaylistOrder
+                key={visibleSelection.event.id}
+                eventId={visibleSelection.event.id}
+                submissions={visibleSelection.submissions}
+                onOrdered={() => requestSelected(visibleSelection.event.id)}
+              />
+            ) : null}
+            <section className="compose" aria-labelledby="compose-heading">
+              <div className="composeIntro">
+                <p className="kicker">Add your video</p>
+                <h2 id="compose-heading">What are you showing?</h2>
+                <p className="formHint">
+                  Save a title first, then upload the video on your card below. Your entry
+                  stays put if the upload needs another try.
+                </p>
+              </div>
               <form
                 className="submissionForm"
                 key={visibleSelection.event.id}
                 aria-label="Create submission"
                 onSubmit={(event) => reportFailure(createSubmission(event))}
               >
-                <h2>Add your video</h2>
-                <p className="formHint">
-                  Start with a title. Save your submission first, then upload a video —
-                  your entry stays safe if the upload needs a retry.
-                </p>
                 <label>
                   Title
                   <input
                     name="title"
                     maxLength={120}
-                    placeholder="What are you showing?"
+                    placeholder="A short, punchy name for your demo"
                     disabled={creatingSubmission}
                     required
                   />
@@ -333,7 +359,9 @@ function ShowAndTell({user}: {user: SessionUser}) {
                   Description (optional)
                   <textarea
                     name="description"
+                    rows={3}
                     maxLength={1000}
+                    placeholder="One or two lines on what people will see"
                     disabled={creatingSubmission}
                   />
                 </label>
@@ -345,121 +373,184 @@ function ShowAndTell({user}: {user: SessionUser}) {
                   {creatingSubmission ? 'Saving…' : 'Create submission'}
                 </button>
               </form>
-              <div className="submissionList">
-                {visibleSelection.submissions.map((submission, index) => (
-                  <article
-                    className={
-                      submission.hidden ? 'submissionCard hidden' : 'submissionCard'
-                    }
-                    key={submission.id}
-                    id={`submission-${submission.id}`}
-                    tabIndex={-1}
-                    aria-label={submission.title}
-                  >
-                    <span className="position">{String(index + 1).padStart(2, '0')}</span>
-                    <div className="submissionBody">
-                      <p className="eyebrow">
-                        {submission.creatorName}
-                        {submission.hidden ? ' · hidden' : ''}
-                      </p>
-                      <h2>{submission.title}</h2>
-                      {submission.description ? <p>{submission.description}</p> : null}
-                      <VideoPanel
-                        submission={submission}
-                        canManage={
-                          user.role === 'admin' || submission.creatorId === user.id
+            </section>
+            <section className="lineup" aria-labelledby="lineup-heading">
+              <header className="lineupHeader">
+                <div>
+                  <p className="kicker">Lineup</p>
+                  <h2 id="lineup-heading">
+                    {visibleSelection.submissions.length}{' '}
+                    {visibleSelection.submissions.length === 1
+                      ? 'submission'
+                      : 'submissions'}
+                  </h2>
+                </div>
+                <p>
+                  Videos play in this order.
+                  {admin ? ' Use Arrange playlist to change it.' : ''}
+                </p>
+              </header>
+              <ol className="submissionList">
+                {visibleSelection.submissions.map((submission, index) => {
+                  const canManage = admin || submission.creatorId === user.id;
+                  return (
+                    <li key={submission.id}>
+                      <article
+                        className={
+                          submission.hidden ? 'submissionCard hidden' : 'submissionCard'
                         }
-                      />
-                    </div>
-                    <div className="cardActions">
-                      {user.role === 'admin' ? (
-                        <button
-                          onClick={() =>
-                            reportFailure(setHidden(submission.id, !submission.hidden))
-                          }
-                        >
-                          {submission.hidden ? 'Show' : 'Hide'}
-                        </button>
-                      ) : null}
-                      {user.role === 'admin' || submission.creatorId === user.id ? (
-                        deleteId === submission.id ? (
-                          <div className="confirmAction">
-                            <p>Delete this submission and its video?</p>
-                            <button
-                              onClick={() =>
-                                reportFailure(removeSubmission(submission.id))
-                              }
-                            >
-                              Confirm delete
-                            </button>
-                            <button onClick={() => setDeleteId(null)}>
-                              Keep submission
-                            </button>
+                        id={`submission-${submission.id}`}
+                        tabIndex={-1}
+                        aria-label={submission.title}
+                      >
+                        <span className="position" aria-hidden="true">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                        <div className="submissionBody">
+                          <div className="submissionByline">
+                            <Avatar
+                              name={submission.creatorName}
+                              className="submissionAvatar"
+                            />
+                            <span>{submission.creatorName}</span>
+                            {submission.hidden ? (
+                              <span className="tag tag--hidden">
+                                Hidden from the show
+                              </span>
+                            ) : null}
                           </div>
-                        ) : (
-                          <button onClick={() => setDeleteId(submission.id)}>
-                            Delete
-                          </button>
-                        )
-                      ) : null}
-                    </div>
-                  </article>
-                ))}
-                {!visibleSelection.submissions.length ? (
-                  <p className="emptyState">
-                    No videos yet. Create a submission above, then upload your video.
-                  </p>
-                ) : null}
-              </div>
-            </>
-          ) : eventsError && !eventsLoaded ? null : selectedId || !eventsLoaded ? (
-            <p className="emptyState">Loading playlist…</p>
-          ) : (
-            <p className="emptyState">No Show &amp; Tell playlists yet.</p>
-          )}
-        </section>
-      </div>
-    </main>
+                          <h2>{submission.title}</h2>
+                          {submission.description ? (
+                            <p className="submissionDescription">
+                              {submission.description}
+                            </p>
+                          ) : null}
+                          <VideoPanel submission={submission} canManage={canManage} />
+                        </div>
+                        {admin || canManage ? (
+                          <div className="cardActions">
+                            {admin ? (
+                              <button
+                                onClick={() =>
+                                  reportFailure(
+                                    setHidden(submission.id, !submission.hidden),
+                                  )
+                                }
+                              >
+                                {submission.hidden ? 'Show' : 'Hide'}
+                              </button>
+                            ) : null}
+                            {canManage ? (
+                              deleteId === submission.id ? (
+                                <div className="confirmAction">
+                                  <p>Delete this submission and its video?</p>
+                                  <button
+                                    onClick={() =>
+                                      reportFailure(removeSubmission(submission.id))
+                                    }
+                                  >
+                                    Confirm delete
+                                  </button>
+                                  <button onClick={() => setDeleteId(null)}>
+                                    Keep submission
+                                  </button>
+                                </div>
+                              ) : (
+                                <button onClick={() => setDeleteId(submission.id)}>
+                                  Delete
+                                </button>
+                              )
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </article>
+                    </li>
+                  );
+                })}
+              </ol>
+              {!visibleSelection.submissions.length ? (
+                <section className="emptyState">
+                  <span>00</span>
+                  <h2>No videos yet</h2>
+                  <p>Create a submission above, then upload your video.</p>
+                </section>
+              ) : null}
+            </section>
+          </>
+        ) : eventsError && !eventsLoaded ? null : selectedId || !eventsLoaded ? (
+          <div className="pageState pageState--loading" aria-busy="true">
+            <Loader />
+            <p>Loading playlist…</p>
+          </div>
+        ) : (
+          <section className="emptyState">
+            <span>00</span>
+            <h2>No Show &amp; Tell playlists yet.</h2>
+            <p>
+              {admin
+                ? 'Create the first playlist above and share it with the company.'
+                : 'An admin creates the first playlist; check back soon.'}
+            </p>
+          </section>
+        )}
+      </main>
+    </AppFrame>
   );
 }
 
 function Loading() {
   return (
-    <main className="shell">
-      <p className="eyebrow">Loading Show &amp; Tell…</p>
+    <main className="authShell authShell--loading">
+      <section className="authState authState--loading" aria-busy="true">
+        <Loader />
+        <p className="kicker">Sentry internal</p>
+        <h1>Loading Show &amp; Tell</h1>
+        <p>Checking your session…</p>
+      </section>
     </main>
   );
 }
+
 function SignIn({authError}: {authError: string | null}) {
+  const returnTo = safeReturnTo(window.location.pathname);
   return (
-    <main className="shell">
-      <p className="eyebrow">Sentry internal</p>
-      <h1>Show &amp; Tell</h1>
-      <p className="lede">Sign in with your Sentry Google account to continue.</p>
-      {authError ? (
-        <p className="authError" role="alert">
-          {authError}
-        </p>
-      ) : null}
-      <a
-        className="primaryAction"
-        href={
-          safeReturnTo(window.location.pathname) === '/'
-            ? '/api/auth/login'
-            : `/api/auth/login?returnTo=${encodeURIComponent(safeReturnTo(window.location.pathname))}`
-        }
-      >
-        Continue with Google
-      </a>
+    <main className="authShell">
+      <ThemeToggle className="authThemeToggle" />
+      <section className="authState">
+        <span className="authMark" aria-hidden="true">
+          <SentrySymbol />
+        </span>
+        <p className="kicker">Sentry internal</p>
+        <h1>Show &amp; Tell</h1>
+        <p>Sign in with your Sentry Google account to watch and share demo videos.</p>
+        {authError ? (
+          <p className="authError" role="alert">
+            {authError}
+          </p>
+        ) : null}
+        <a
+          className="googleLogin"
+          href={
+            returnTo === '/'
+              ? '/api/auth/login'
+              : `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`
+          }
+        >
+          <GoogleIcon />
+          Continue with Google
+        </a>
+      </section>
     </main>
   );
 }
+
 function readAuthError() {
   const reason = new URLSearchParams(window.location.search).get('auth_error');
   if (reason === 'forbidden') return 'Use a Sentry Google account to sign in.';
   if (reason === 'failed') return 'Google sign-in failed. Please try again.';
   return null;
 }
+
 function parseSession(value: JsonInput): SessionUser | null {
   if (!isJsonObject(value) || !isJsonObject(value.user)) return null;
   const user = value.user;
