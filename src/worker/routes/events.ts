@@ -68,7 +68,7 @@ eventRoutes.get('/:eventId', async (c) => {
      FROM submissions s JOIN users u ON u.id = s.creator_id
      WHERE s.event_id = ? AND s.deleted_at IS NULL
        AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
-     ORDER BY s.created_at`,
+     ORDER BY s.playlist_position, s.created_at, s.id`,
   )
     .bind(c.req.param('eventId'), c.get('user').role, c.get('user').id)
     .all<SubmissionRow>();

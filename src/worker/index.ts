@@ -8,6 +8,7 @@ import {
 import {requireRole} from './middleware/user';
 import {authenticatedAuthRoutes, authRoutes} from './routes/auth';
 import {eventRoutes} from './routes/events';
+import {playlistRoutes} from './routes/playlists';
 import {sessionRoutes} from './routes/session';
 import {submissionVideoRoutes, videosRoutes} from './routes/videos';
 import {reapExpiredMultipartVideoUploads} from './services/videos';
@@ -22,12 +23,24 @@ export type WorkerEnv = {
   Variables: AuthVariables;
 };
 export const app = new Hono<WorkerEnv>();
+// Canonicalize before auth or assets so cookies and Google callbacks use one host.
+app.use('*', async (c, next) => {
+  const url = new URL(c.req.url);
+  if (url.hostname === 'showntell.sentry.new') {
+    url.protocol = 'https:';
+    url.host = 'showandtell.sentry.new';
+    url.port = '';
+    return c.redirect(url.toString(), 308);
+  }
+  await next();
+});
 app.get('/api/health', (c) => c.json({ok: true}));
 app.route('/api/auth', authRoutes);
 app.use('/api/*', authenticateRequest<WorkerEnv>());
 app.use('/api/*', protectMutationOrigin<WorkerEnv>());
 app.route('/api/auth', authenticatedAuthRoutes);
 app.route('/api/session', sessionRoutes);
+app.route('/api/events', playlistRoutes);
 app.route('/api/events', eventRoutes);
 app.route('/api/submissions', submissionVideoRoutes);
 app.route('/api/videos', videosRoutes);

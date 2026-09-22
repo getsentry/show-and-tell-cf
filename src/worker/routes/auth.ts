@@ -1,4 +1,5 @@
 import {Hono} from 'hono';
+import {safeReturnTo} from '../../shared/playlist';
 import {
   exchangeAuthorizationCode,
   googleAuthorizationUrl,
@@ -44,7 +45,7 @@ authRoutes.get('/login', async (c) => {
     const codeChallenge = await sha256Base64Url(codeVerifier);
     await cleanupExpiredAuthRecords(c.env.DB, now);
     await c.env.DB.prepare(
-      `INSERT INTO oauth_login_attempts (state_hash, nonce, code_verifier, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO oauth_login_attempts (state_hash, nonce, code_verifier, expires_at, created_at, return_to) VALUES (?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         await sha256Hex(state),
@@ -52,6 +53,7 @@ authRoutes.get('/login', async (c) => {
         codeVerifier,
         now + LOGIN_ATTEMPT_TTL_SECONDS,
         now,
+        safeReturnTo(c.req.query('returnTo')),
       )
       .run();
     c.header('Set-Cookie', oauthStateCookie(state, config, LOGIN_ATTEMPT_TTL_SECONDS));
@@ -84,10 +86,10 @@ authRoutes.get('/callback', async (c) => {
       throw new AuthenticationError('AUTH_INVALID', 'Google authorization failed', 401);
     const now = Math.floor(Date.now() / 1000);
     const attempt = await c.env.DB.prepare(
-      `UPDATE oauth_login_attempts SET consumed_at = ? WHERE state_hash = ? AND consumed_at IS NULL AND expires_at > ? RETURNING nonce, code_verifier`,
+      `UPDATE oauth_login_attempts SET consumed_at = ? WHERE state_hash = ? AND consumed_at IS NULL AND expires_at > ? RETURNING nonce, code_verifier, return_to`,
     )
       .bind(now, await sha256Hex(state), now)
-      .first<{nonce: string; code_verifier: string}>();
+      .first<{nonce: string; code_verifier: string; return_to: string}>();
     if (!attempt)
       throw new AuthenticationError(
         'AUTH_INVALID',
@@ -104,7 +106,7 @@ authRoutes.get('/callback', async (c) => {
     const user = await synchronizeGoogleUser(c.env.DB, identity);
     const session = await createSession(c.env.DB, user.id, now);
     c.header('Set-Cookie', sessionCookie(session.token, config), {append: true});
-    return c.redirect('/');
+    return c.redirect(safeReturnTo(attempt.return_to));
   } catch (error) {
     return failure(
       c,

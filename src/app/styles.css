@@ -409,3 +409,195 @@ progress {
     gap: 0.75rem;
   }
 }
+
+.playlistActions,
+.sharePlaylist,
+.screeningControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.playlistActions {
+  margin: 1.5rem 0;
+}
+.sharePlaylist span {
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.playlistOrder {
+  margin: 1rem 0 2rem;
+  padding: 1rem;
+  border: 1px solid #59446f;
+  border-radius: 0.75rem;
+}
+.playlistOrder summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.playlistOrder ol {
+  padding: 0;
+  list-style: none;
+}
+.playlistOrder li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.playlistOrder li span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.playlistPage a:not(.primaryAction) {
+  color: #c7b5ff;
+}
+.playlistPage .topbar {
+  flex-wrap: wrap;
+}
+.playlistHeader {
+  padding: 2rem;
+}
+.playlistHeader h1 {
+  max-width: none;
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.playlistHeader .sharePlaylist {
+  margin-top: 1.5rem;
+}
+.playlistScreening {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: 1.5rem;
+  padding: 0 2rem 2rem;
+}
+.screeningShell {
+  min-width: 0;
+  background: #191220;
+  border: 1px solid #392d4d;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+.screeningStage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+.screeningClip {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  visibility: hidden;
+  pointer-events: none;
+}
+.screeningClip.active {
+  visibility: visible;
+  pointer-events: auto;
+}
+.screeningOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  text-align: center;
+  background: radial-gradient(ellipse at top right, #472958, #170f20 75%);
+  overflow: auto;
+}
+.screeningOverlay h2 {
+  font-size: clamp(1.5rem, 4vw, 3rem);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.screeningOverlay p {
+  margin: 0.75rem 0;
+}
+.screeningControls {
+  padding: 1rem;
+  border-top: 1px solid #392d4d;
+}
+.nowPlaying {
+  padding: 0.5rem 1rem 1rem;
+  overflow-wrap: anywhere;
+}
+.nowPlaying h2 {
+  margin: 0.5rem 0;
+}
+.nowPlaying p {
+  color: #d9d2e8;
+}
+.screeningQueue {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 75vh;
+  overflow: auto;
+}
+.screeningQueue button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 0.5rem;
+  padding: 1rem;
+}
+.screeningQueue button[aria-current] {
+  border-color: #c7b5ff;
+  background: #39264a;
+}
+.screeningQueue button span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.screeningQueue small {
+  display: block;
+  margin-top: 0.5rem;
+  color: #d9d2e8;
+}
+.screeningShell:fullscreen {
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  overflow: auto;
+}
+.screeningShell:fullscreen .screeningStage {
+  flex: 1;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+.screeningShell:fullscreen .nowPlaying {
+  display: none;
+}
+@media (max-width: 950px) {
+  .playlistScreening {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0 1rem 1rem;
+  }
+  .playlistHeader {
+    padding: 1.5rem 1rem;
+  }
+  .screeningQueue {
+    max-height: none;
+  }
+}
+@media (max-width: 500px) {
+  .screeningStage {
+    aspect-ratio: 4 / 3;
+  }
+  .screeningOverlay {
+    padding: 0.75rem;
+  }
+  .screeningOverlay .eyebrow {
+    font-size: 0.65rem;
+  }
+}

@@ -26,6 +26,10 @@
     "VIDEO_PROCESSOR_CONCURRENCY": "1",
     "VIDEO_PROCESSING_AUTOSTART": "true"
   },
+  "routes": [
+    {"pattern": "showandtell.sentry.new", "custom_domain": true},
+    {"pattern": "showntell.sentry.new", "custom_domain": true}
+  ],
   "observability": {
     "enabled": true
   },
