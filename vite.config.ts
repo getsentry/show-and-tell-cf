@@ -8,6 +8,7 @@ export default defineConfig({
     ignorePatterns: [
       'dist/**',
       'node_modules/**',
+      'src/assets/**',
       'tools/oxlint/anti-slop/**',
       'worker-configuration.d.ts',
     ],

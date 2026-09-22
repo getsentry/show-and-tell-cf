@@ -296,7 +296,7 @@ export function VideoPanel({
       ) : video ? (
         <>
           <div className="videoStatusRow">
-            <span className={`statusBadge ${video.status}`}>
+            <span className={`tag tag--${video.status}`}>
               {video.status === 'ready'
                 ? 'Ready to watch'
                 : video.status === 'failed'
@@ -311,7 +311,7 @@ export function VideoPanel({
           </div>
           <p className="fileName">{video.originalName}</p>
           {video.status === 'processing' ? (
-            <div role="status">
+            <div className="uploadProgress" role="status">
               <p className="formHint">
                 {video.processingStage
                   ? stages[video.processingStage]
@@ -356,6 +356,7 @@ export function VideoPanel({
               />
             ) : (
               <button
+                className="textAction"
                 disabled={busy}
                 onClick={() =>
                   void perform('updating', async (signal) => {
@@ -453,7 +454,7 @@ export function VideoPanel({
             Switching playlists pauses uploads.
           </p>
           {operation === 'uploading' || operation === 'completing' ? (
-            <div role="status">
+            <div className="uploadProgress" role="status">
               <p>
                 {operation === 'completing'
                   ? 'Saving upload…'

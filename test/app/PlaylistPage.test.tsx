@@ -9,6 +9,13 @@ import type {Submission} from '../../src/shared/events';
 import type {SessionUser} from '../../src/shared/api';
 import type {PlaybackResponse} from '../../src/shared/videos';
 
+const viewer: SessionUser = {
+  id: 'u',
+  email: 'u@sentry.io',
+  displayName: 'Viewer',
+  role: 'member',
+  avatarUrl: null,
+};
 const playlist: PlaylistResponse = {
   event: {id: 'event', title: 'September Show & Tell', description: null},
   items: ['a', 'b'].map((id) => ({
@@ -56,42 +63,89 @@ describe('playlist page', () => {
   it('loads a shared screening rather than the editor and starts on a user gesture', async () => {
     window.history.replaceState(null, '', '/playlists/event');
     const fetch = vi.fn(async (url: string) => {
-      if (url === '/api/session')
-        return response({
-          user: {
-            id: 'u',
-            email: 'u@sentry.io',
-            displayName: 'Viewer',
-            role: 'member',
-            avatarUrl: null,
-          },
-        });
+      if (url === '/api/session') return response({user: viewer});
       if (url === '/api/events/event/playlist') return response(playlist);
       return response({source: {kind: 'mp4', url: '/content'}, expiresAt: null});
     });
     vi.stubGlobal('fetch', fetch);
     render(<App />);
     expect(
-      await screen.findByRole('heading', {name: 'September Show & Tell'}),
+      await screen.findByRole('heading', {name: 'September Show & Tell', level: 1}),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('form', {name: 'Create submission'}),
     ).not.toBeInTheDocument();
     expect(play).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', {name: 'Play playlist'}));
-    await waitFor(() =>
-      expect(screen.getByRole('button', {name: 'Pause'})).toBeEnabled(),
+    fireEvent.click(screen.getByRole('button', {name: 'Play all'}));
+    // Every clip is announced on a title card first; the countdown can be skipped.
+    await waitFor(
+      () => expect(screen.getByRole('button', {name: 'Start now'})).toBeEnabled(),
+      {timeout: 3000},
     );
+    expect(screen.getByText('Up next')).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Demo a'})).toBeInTheDocument();
+    expect(play).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledWith(
       '/api/events/event/playlist/a/playback',
       undefined,
     );
-    fireEvent.click(screen.getByRole('button', {name: 'Next'}));
-    await waitFor(() =>
-      expect(screen.getByRole('button', {name: 'Finish'})).toBeEnabled(),
+    fireEvent.click(screen.getByRole('button', {name: 'Start now'}));
+    await waitFor(
+      () => expect(screen.getByRole('button', {name: 'Pause'})).toBeEnabled(),
+      {timeout: 3000},
     );
+    expect(play).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+    await waitFor(
+      () => expect(screen.getByRole('button', {name: 'Finish'})).toBeEnabled(),
+      {timeout: 3000},
+    );
+    expect(screen.getByRole('heading', {name: 'Demo b'})).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', {name: 'Finish'}));
-    expect(screen.getByText('Playlist complete')).toBeInTheDocument();
+    expect(screen.getByText('That’s a wrap')).toBeInTheDocument();
+    // The wrap card and the control bar both offer a replay.
+    fireEvent.click(screen.getAllByRole('button', {name: 'Play again'})[0]);
+    await waitFor(
+      () => expect(screen.getByRole('button', {name: 'Start now'})).toBeEnabled(),
+      {timeout: 3000},
+    );
+    expect(screen.getByRole('heading', {name: 'Demo a'})).toBeInTheDocument();
+  });
+  it('skips the countdown, mutes, and steps through clips with keyboard shortcuts', async () => {
+    window.history.replaceState(null, '', '/playlists/event');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url === '/api/events/event/playlist'
+          ? response(playlist)
+          : response({source: {kind: 'mp4', url: '/content'}, expiresAt: null}),
+      ),
+    );
+    render(<PlaylistPage eventId="event" user={viewer} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Play all'}));
+    await waitFor(
+      () => expect(screen.getByRole('button', {name: 'Start now'})).toBeEnabled(),
+      {timeout: 3000},
+    );
+    fireEvent.keyDown(window, {code: 'Space', key: ' '});
+    await waitFor(
+      () => expect(screen.getByRole('button', {name: 'Pause'})).toBeEnabled(),
+      {timeout: 3000},
+    );
+    fireEvent.keyDown(window, {code: 'KeyM', key: 'm'});
+    expect(screen.getByRole('button', {name: 'Unmute'})).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    fireEvent.keyDown(window, {code: 'ArrowRight', key: 'ArrowRight'});
+    await waitFor(() =>
+      expect(screen.getByRole('heading', {name: 'Demo b'})).toBeInTheDocument(),
+    );
+    fireEvent.keyDown(window, {code: 'ArrowLeft', key: 'ArrowLeft'});
+    await waitFor(() =>
+      expect(screen.getByRole('heading', {name: 'Demo a'})).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', {name: 'Unmute'})).toBeInTheDocument();
   });
   it('recovers from load failures and renders a stable empty playlist', async () => {
     const fetch = vi
@@ -99,18 +153,18 @@ describe('playlist page', () => {
       .mockResolvedValueOnce(response({}, 500))
       .mockResolvedValueOnce(response({...playlist, items: []}));
     vi.stubGlobal('fetch', fetch);
-    render(<PlaylistPage eventId="event" />);
+    render(<PlaylistPage eventId="event" user={viewer} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('500');
     fireEvent.click(screen.getByRole('button', {name: 'Retry loading'}));
     expect(await screen.findByText(/No videos are ready/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', {name: 'Play playlist'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Play all'})).not.toBeInTheDocument();
   });
   it('reports unavailable fullscreen and provides a clipboard fallback', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => response(playlist)),
     );
-    render(<PlaylistPage eventId="event" />);
+    render(<PlaylistPage eventId="event" user={viewer} />);
     fireEvent.click(await screen.findByRole('button', {name: 'Fullscreen'}));
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Fullscreen is unavailable',
