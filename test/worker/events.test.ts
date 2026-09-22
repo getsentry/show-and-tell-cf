@@ -19,6 +19,35 @@ beforeEach(async () => {
 });
 
 describe('events and submissions', () => {
+  it('accepts only a title with no project link column or response field', async () => {
+    const admin = await userCookie('admin', true);
+    const eventResponse = await request('/api/events', admin.cookie, 'POST', {
+      title: 'Show & Tell — October 2026',
+    });
+    const {event} = await eventResponse.json<{event: {id: string; description: null}}>();
+    expect(event.description).toBeNull();
+    const created = await request(
+      `/api/events/${event.id}/submissions`,
+      admin.cookie,
+      'POST',
+      {title: 'My demo'},
+    );
+    expect(created.status).toBe(201);
+    const body = await created.json<{
+      submission: {id: string; description: null; projectUrl?: string};
+    }>();
+    expect(body.submission.description).toBeNull();
+    expect(body.submission).not.toHaveProperty('projectUrl');
+    const detail = await request(`/api/events/${event.id}`, admin.cookie, 'GET');
+    expect(await detail.json()).toMatchObject({
+      submissions: [{id: body.submission.id, title: 'My demo'}],
+    });
+    const columns = await env.DB.prepare('PRAGMA table_info(submissions)').all<{
+      name: string;
+    }>();
+    expect(columns.results.map((column) => column.name)).not.toContain('project_url');
+  });
+
   it('lets admins create events and members create durable submissions', async () => {
     const admin = await userCookie('admin', true);
     const member = await userCookie('member', false);
@@ -37,7 +66,6 @@ describe('events and submissions', () => {
       {
         title: 'New profiler',
         description: 'A reliable project record',
-        projectUrl: 'https://github.com/getsentry/sentry',
       },
     );
     expect(submissionResponse.status).toBe(201);
@@ -67,7 +95,6 @@ describe('events and submissions', () => {
       {
         title: 'Demo',
         description: '',
-        projectUrl: 'https://example.com/demo',
       },
     );
     const submission = await created.json<{submission: {id: string}}>();

@@ -56,9 +56,15 @@ The verification gate generates Cloudflare binding types, typechecks, checks for
 
 Google OAuth uses Authorization Code with PKCE, state and nonce verification, exact verified `@sentry.io` enforcement, hashed opaque D1 sessions, and HttpOnly cookies. Authenticated mutations require the exact same-origin `Origin` header.
 
-## Video pipeline (backend)
+## Submissions and video uploads
 
-This PR ports Hack Week's private R2 multipart lifecycle, Workflow, and pinned FFmpeg 8.0.1 processor, without years, groups, voting, or team membership. The upload UI and playlist player are subsequent PRs. Create the submission first; failed uploads or processing never remove that record.
+Playlists and submissions need only a title and optional description. For dated events, use a title such as `Show & Tell — October 2026`. Project links are no longer accepted as a required field or exposed in the API/UI. Migration `0004_remove_project_url.sql` drops the unused `project_url` column and permanently discards its old values. Submission records and video relationships are preserved; no compatibility placeholder remains.
+
+Create a submission first, then use **Choose video → Upload video** on its card. The browser uploads 50 MiB parts and shows saved-byte progress. Pause/resume, retry interrupted uploads, or discard an unfinished upload without deleting the submission. Reloading/switching playlists pauses transfers; reselect the **original, unchanged file** to resume. Completed parts and active upload discovery live on the server, including recovery when a create response is lost. The browser remembers `lastModified` when storage is available to catch accidental file revisions; this is a convenience check, not a content hash.
+
+Queued/processing status refreshes every five seconds. Failed processing offers retry or confirmed video removal for replacement. Ready videos have authenticated, native **Watch video** controls. Continuous playlist playback and ordering remain a subsequent PR.
+
+The backend ports Hack Week's private R2 multipart lifecycle, Workflow, and pinned FFmpeg 8.0.1 processor, without years, groups, voting, or team membership. Failed uploads or processing never remove the saved submission.
 
 - One active video or upload per submission, enforced in D1. Only the owner or an admin can upload, abort, retry, or retire it.
 - Maximum 5 GiB; 50 MiB streamed parts, 24-hour upload sessions, resumable via the stored part list. Completion validates every part and final object size, and is idempotent. Repeating completion or retrying a queued video recovers an interrupted Workflow handoff.
@@ -74,6 +80,7 @@ This PR ports Hack Week's private R2 multipart lifecycle, Workflow, and pinned F
 All paths below start with `/api`; all writes require the same-origin `Origin` header and session cookie.
 
 - `GET /submissions/:id/video`: current video, status, processing stage/percent, duration, failure message.
+- `GET /submissions/:id/video/upload`: discover an active upload (owner/admin only), including after a lost create response. Read-only; expired sessions are cleaned by the existing recovery/cleanup paths.
 - `POST /submissions/:id/video/upload`: `{fileName, fileSize, contentType}` → `{upload, video}`.
 - `GET /submissions/:id/video/upload/:uploadId`: resume metadata and completed parts.
 - `PUT /submissions/:id/video/upload/:uploadId/parts/:partNumber`: raw bytes with exact `Content-Length` → `{part: {partNumber, etag, sizeBytes}}`.
@@ -84,13 +91,13 @@ All paths below start with `/api`; all writes require the same-origin `Origin` h
 - `GET /videos/:videoId/playback`: authenticated MP4 descriptor.
 - `GET /videos/:videoId/content`: full or single-range canonical MP4.
 
-### Approval gate before merging/deploying video support
+### Production rollout and smoke test
 
-**Do not merge until resource creation and this production deployment are explicitly approved.** Main automatically deploys. This branch does not provision anything by itself.
+Main automatically deploys through Workers Builds. The video infrastructure was approved and deployed with PR #5; the upload UI needs no new bindings or secrets. Migration `0004_remove_project_url.sql` runs on deployment and permanently removes stored project URLs. The previously deployed Worker requires this column, so event-detail reads and submission creation can fail between migration and Worker deployment; roll forward to this PR's Worker rather than rolling back to the old code. Additional Cloudflare writes still require explicit approval.
 
-1. Approve and create the private R2 bucket `show-and-tell-videos-production` in Sentry Internal. Keep public access disabled; same-origin Worker uploads do not need R2 CORS or S3 credentials.
+1. For a new environment, approve and create the private R2 bucket `show-and-tell-videos-production` in Sentry Internal. Keep public access disabled; same-origin Worker uploads do not need R2 CORS or S3 credentials.
 2. Verify the Workers Builds token can deploy Workers, D1 migrations, Workflows, Containers/images, and R2 bindings. Container deployment needs Docker in the build environment. Do not paste tokens into Slack or the repository.
-3. Approve the deploy that applies D1 migration `0003_video_pipeline.sql` and creates `show-and-tell-video-processing-production`, `show-and-tell-video-processor-production`, its SQLite Durable Object namespace, and hourly cleanup trigger. Config lives in `wrangler.production.json`; development uses local emulated resources.
-4. After deploy, smoke-test using an authenticated session: create a submission, upload a short MP4 through the API, observe queued → processing → ready, play/seek the output, hide it and verify another user cannot read it, then delete it. Repeat with corrupt input and retry. Browser upload controls arrive in the next PR.
+3. For a new environment, approve the deploy that applies D1 migration `0003_video_pipeline.sql` and creates `show-and-tell-video-processing-production`, `show-and-tell-video-processor-production`, its SQLite Durable Object namespace, and hourly cleanup trigger. Config lives in `wrangler.production.json`; development uses local emulated resources.
+4. After deploy, smoke-test using an authenticated session: create a submission, choose a short MP4 in the upload UI, observe queued → processing → ready, play/seek the output, hide it and verify another user cannot read it, then delete it. Repeat with corrupt input and retry. Reload during an interrupted upload and verify resume; confirm the browser supplies Content-Length for Blob parts.
 
 For isolated processor regressions run `npm run test:processor:docker` (included in `verify`). This extracts the pinned binaries from the built image into a temporary directory; tests fail rather than skip if the correct FFmpeg version is unavailable. Worker integration tests use emulated D1/R2 with Workflow autostart disabled, so local verification is not proof of deployed Cloudflare orchestration.

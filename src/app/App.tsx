@@ -1,8 +1,15 @@
 import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react';
 
 import type {SessionUser} from '../shared/api';
-import type {EventResponse, EventsResponse, ShowAndTellEvent} from '../shared/events';
+import type {
+  EventResponse,
+  EventsResponse,
+  ShowAndTellEvent,
+  Submission,
+} from '../shared/events';
 import {isJsonObject, isJsonString, type JsonInput} from '../shared/json';
+import {api, json} from './api';
+import {VideoPanel} from './VideoPanel';
 
 export function App() {
   const [user, setUser] = useState<SessionUser | null | undefined>();
@@ -38,12 +45,19 @@ function ShowAndTell({user}: {user: SessionUser}) {
   const selectedIdRef = useRef<string | null>(null);
   const eventsRequest = useRef(0);
   const selectedRequests = useRef(new Map<string, number>());
+  const [creatingEvent, setCreatingEvent] = useState(false);
+  const [creatingSubmission, setCreatingSubmission] = useState(false);
+  const eventPending = useRef(false);
+  const submissionPending = useRef(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [createdSubmission, setCreatedSubmission] = useState<Submission | null>(null);
 
   const selectEvent = useCallback((eventId: string | null) => {
     if (eventId !== selectedIdRef.current) {
       setFailedSelection(null);
       setSelectionError(null);
     }
+    setDeleteId(null);
     selectedIdRef.current = eventId;
     setSelectedId(eventId);
   }, []);
@@ -106,37 +120,61 @@ function ShowAndTell({user}: {user: SessionUser}) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    await api(
-      '/events',
-      json('POST', {
-        title: data.get('title'),
-        description: data.get('description'),
-      }),
-    );
-    form.reset();
-    await loadEvents();
+    if (eventPending.current) return;
+    eventPending.current = true;
+    setCreatingEvent(true);
+    const previousSelection = selectedIdRef.current;
+    try {
+      const result = await api<{event: ShowAndTellEvent}>(
+        '/events',
+        json('POST', {
+          title: data.get('title'),
+          description: data.get('description'),
+        }),
+      );
+      form.reset();
+      // Keep the new playlist usable even if refreshing the list fails.
+      setEvents((current) => [
+        result.event,
+        ...current.filter((entry) => entry.id !== result.event.id),
+      ]);
+      setEventsLoaded(true);
+      if (selectedIdRef.current === previousSelection) selectEvent(result.event.id);
+      await loadEvents();
+    } finally {
+      eventPending.current = false;
+      setCreatingEvent(false);
+    }
   }
 
   async function createSubmission(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedId) return;
+    if (!selectedId || submissionPending.current) return;
     const form = event.currentTarget;
     const data = new FormData(form);
-    await api(
-      `/events/${selectedId}/submissions`,
-      json('POST', {
-        title: data.get('title'),
-        description: data.get('description'),
-        projectUrl: data.get('projectUrl'),
-      }),
-    );
-    form.reset();
-    await Promise.all([loadEvents(), requestSelected(selectedId)]);
+    submissionPending.current = true;
+    setCreatingSubmission(true);
+    try {
+      const {submission} = await api<{submission: Submission}>(
+        `/events/${selectedId}/submissions`,
+        json('POST', {
+          title: data.get('title'),
+          description: data.get('description'),
+        }),
+      );
+      form.reset();
+      setCreatedSubmission(submission);
+      await Promise.all([loadEvents(), requestSelected(selectedId)]);
+    } finally {
+      submissionPending.current = false;
+      setCreatingSubmission(false);
+    }
   }
 
   async function removeSubmission(submissionId: string) {
     if (!selectedId) return;
     await api(`/events/${selectedId}/submissions/${submissionId}`, {method: 'DELETE'});
+    setDeleteId(null);
     await Promise.all([loadEvents(), requestSelected(selectedId)]);
   }
 
@@ -150,6 +188,18 @@ function ShowAndTell({user}: {user: SessionUser}) {
   }
 
   const visibleSelection = selected?.event.id === selectedId ? selected : null;
+  useEffect(() => {
+    if (!createdSubmission) return;
+    if (createdSubmission.eventId !== selectedId) {
+      setCreatedSubmission(null);
+      return;
+    }
+    const card = document.getElementById(`submission-${createdSubmission.id}`);
+    if (card) {
+      card.focus();
+      setCreatedSubmission(null);
+    }
+  }, [createdSubmission, selectedId, visibleSelection]);
 
   return (
     <main className="appShell">
@@ -179,28 +229,39 @@ function ShowAndTell({user}: {user: SessionUser}) {
             <button
               className={event.id === selectedId ? 'eventButton active' : 'eventButton'}
               key={event.id}
+              aria-current={event.id === selectedId ? 'true' : undefined}
               onClick={() => selectEvent(event.id)}
             >
               <strong>{event.title}</strong>
-              <span>{event.submissionCount} submissions</span>
+              <span>
+                {event.submissionCount}{' '}
+                {event.submissionCount === 1 ? 'submission' : 'submissions'}
+              </span>
             </button>
           ))}
           {user.role === 'admin' ? (
             <form
               className="stackedForm"
+              aria-label="Create playlist"
               onSubmit={(event) => reportFailure(createEvent(event))}
             >
               <h2>New Show &amp; Tell</h2>
               <label>
                 Title
-                <input name="title" maxLength={120} required />
+                <input
+                  name="title"
+                  maxLength={120}
+                  placeholder="Show & Tell — October 2026"
+                  disabled={creatingEvent}
+                  required
+                />
               </label>
               <label>
-                Description
-                <textarea name="description" maxLength={1000} />
+                Description (optional)
+                <textarea name="description" maxLength={1000} disabled={creatingEvent} />
               </label>
-              <button className="primaryAction" type="submit">
-                Create playlist
+              <button className="primaryAction" type="submit" disabled={creatingEvent}>
+                {creatingEvent ? 'Creating…' : 'Create playlist'}
               </button>
             </form>
           ) : null}
@@ -222,23 +283,39 @@ function ShowAndTell({user}: {user: SessionUser}) {
               </header>
               <form
                 className="submissionForm"
+                key={visibleSelection.event.id}
+                aria-label="Create submission"
                 onSubmit={(event) => reportFailure(createSubmission(event))}
               >
-                <h2>Add your project</h2>
+                <h2>Add your video</h2>
+                <p className="formHint">
+                  Start with a title. Save your submission first, then upload a video —
+                  your entry stays safe if the upload needs a retry.
+                </p>
                 <label>
                   Title
-                  <input name="title" maxLength={120} required />
+                  <input
+                    name="title"
+                    maxLength={120}
+                    placeholder="What are you showing?"
+                    disabled={creatingSubmission}
+                    required
+                  />
                 </label>
                 <label>
-                  Project link
-                  <input name="projectUrl" type="url" required />
+                  Description (optional)
+                  <textarea
+                    name="description"
+                    maxLength={1000}
+                    disabled={creatingSubmission}
+                  />
                 </label>
-                <label>
-                  Description
-                  <textarea name="description" maxLength={1000} />
-                </label>
-                <button className="primaryAction" type="submit">
-                  Create submission
+                <button
+                  className="primaryAction"
+                  type="submit"
+                  disabled={creatingSubmission}
+                >
+                  {creatingSubmission ? 'Saving…' : 'Create submission'}
                 </button>
               </form>
               <div className="submissionList">
@@ -248,18 +325,24 @@ function ShowAndTell({user}: {user: SessionUser}) {
                       submission.hidden ? 'submissionCard hidden' : 'submissionCard'
                     }
                     key={submission.id}
+                    id={`submission-${submission.id}`}
+                    tabIndex={-1}
+                    aria-label={submission.title}
                   >
                     <span className="position">{String(index + 1).padStart(2, '0')}</span>
-                    <div>
+                    <div className="submissionBody">
                       <p className="eyebrow">
                         {submission.creatorName}
                         {submission.hidden ? ' · hidden' : ''}
                       </p>
                       <h2>{submission.title}</h2>
                       {submission.description ? <p>{submission.description}</p> : null}
-                      <a href={submission.projectUrl} target="_blank" rel="noreferrer">
-                        Open project ↗
-                      </a>
+                      <VideoPanel
+                        submission={submission}
+                        canManage={
+                          user.role === 'admin' || submission.creatorId === user.id
+                        }
+                      />
                     </div>
                     <div className="cardActions">
                       {user.role === 'admin' ? (
@@ -272,17 +355,33 @@ function ShowAndTell({user}: {user: SessionUser}) {
                         </button>
                       ) : null}
                       {user.role === 'admin' || submission.creatorId === user.id ? (
-                        <button
-                          onClick={() => reportFailure(removeSubmission(submission.id))}
-                        >
-                          Delete
-                        </button>
+                        deleteId === submission.id ? (
+                          <div className="confirmAction">
+                            <p>Delete this submission and its video?</p>
+                            <button
+                              onClick={() =>
+                                reportFailure(removeSubmission(submission.id))
+                              }
+                            >
+                              Confirm delete
+                            </button>
+                            <button onClick={() => setDeleteId(null)}>
+                              Keep submission
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setDeleteId(submission.id)}>
+                            Delete
+                          </button>
+                        )
                       ) : null}
                     </div>
                   </article>
                 ))}
                 {!visibleSelection.submissions.length ? (
-                  <p className="emptyState">No projects yet. Somebody has to go first.</p>
+                  <p className="emptyState">
+                    No videos yet. Create a submission above, then upload your video.
+                  </p>
                 ) : null}
               </div>
             </>
@@ -297,27 +396,6 @@ function ShowAndTell({user}: {user: SessionUser}) {
   );
 }
 
-interface JsonBody {
-  [key: string]: FormDataEntryValue | boolean | null;
-}
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, init);
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-  if (response.status === 204) {
-    // SAFETY: callers of 204 endpoints do not consume a response value.
-    return undefined as T;
-  }
-  // SAFETY: API responses are produced by the same-version Worker contract.
-  return response.json() as Promise<T>;
-}
-function json(method: string, body: JsonBody): RequestInit {
-  return {
-    method,
-    headers: {'Content-Type': 'application/json', Origin: window.location.origin},
-    body: JSON.stringify(body),
-  };
-}
 function Loading() {
   return (
     <main className="shell">

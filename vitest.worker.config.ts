@@ -10,6 +10,7 @@ export default defineConfig({
     cloudflareTest(async () => ({
       wrangler: {configPath: './wrangler.jsonc'},
       miniflare: {
+        d1Databases: ['MIGRATION_DB'],
         serviceBindings: {
           ASSETS: async () => new Response('<div id="root"></div>'),
         },
