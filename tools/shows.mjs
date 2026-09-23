@@ -95,7 +95,7 @@ export function createSql(plan) {
 }
 export const listSql = `SELECT e.id, e.plan_key, e.title, e.slug, e.is_hidden, e.starts_at, e.reminder_at, e.timezone, e.meeting_url, e.cancelled_at,
   r.channel, r.status, r.attempted_at, r.completed_at, r.provider_id
-  FROM show_and_tell_events e LEFT JOIN show_reminders r ON r.event_id = e.id
+  FROM show_and_tell_events e LEFT JOIN show_reminders r ON r.event_id = e.id AND r.channel = 'email'
   WHERE e.plan_key IS NOT NULL ORDER BY e.starts_at DESC LIMIT 100;`;
 
 function query(sql, remote) {
@@ -181,8 +181,8 @@ export function main(args) {
     } else if (command === 'cancel') {
       sql = `UPDATE show_and_tell_events SET cancelled_at = CURRENT_TIMESTAMP, is_hidden = 1, plan_updated_by = ${admin(actor)}, updated_at = CURRENT_TIMESTAMP WHERE ${guard} RETURNING id;`;
     } else {
-      if (!['email', 'slack'].includes(input.channel))
-        throw new Error('Choose email or slack');
+      if (input.channel !== 'email')
+        throw new Error('Only email reminders can be retried');
       plan.channel = input.channel;
       sql = `UPDATE show_reminders SET status = 'pending', retry_by = ${admin(actor)} WHERE event_id = ${quote(id)} AND channel = ${quote(input.channel)} AND status = 'failed'
         AND EXISTS (SELECT 1 FROM show_and_tell_events WHERE ${guard} AND julianday(starts_at) > julianday('now') AND julianday(reminder_at) >= julianday('now', '-1 day')) RETURNING event_id;`;
@@ -240,7 +240,7 @@ export function main(args) {
         action: command,
         event: actual,
         deliveries: query(
-          `SELECT * FROM show_reminders WHERE event_id = ${quote(plan.id)}`,
+          `SELECT * FROM show_reminders WHERE event_id = ${quote(plan.id)} AND channel = 'email'`,
           remote,
         ),
         submissionUrl: `${origin}/events/${actual.id}/${actual.slug}`,

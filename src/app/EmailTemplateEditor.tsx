@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useState, useRef} from 'react';
 import {
   defaultEmailTemplate,
   templateFields,
@@ -40,6 +40,11 @@ export function EmailTemplateEditor({
   const [reload, setReload] = useState(0);
   const [eventId, setEventId] = useState(shows[0]?.id ?? '');
   const [preview, setPreview] = useState<EmailPreview | null>(null);
+  const testPayload = useRef<string | null>(null);
+  const [testStatus, setTestStatus] = useState<'sent' | 'sending' | 'uncertain' | null>(
+    null,
+  );
+  const [testStarted, setTestStarted] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     setData(null);
@@ -66,11 +71,42 @@ export function EmailTemplateEditor({
       };
       if (action === 'save') {
         setData(await api<EmailTemplateResponse>('/admin/email-template', init));
-        setNotice(
-          'Saved for future email attempts. Nothing was sent; Slack is unchanged.',
-        );
+        setNotice('Saved for future email attempts. Nothing was sent.');
         onSaved();
       } else setPreview(await api<EmailPreview>('/admin/email-template/preview', init));
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function sendTest() {
+    if (!data || !preview || busy) return;
+    // Keep this payload across network errors: checking the same attempt cannot resend.
+    testPayload.current ??= JSON.stringify({
+      eventId,
+      template: data.template,
+      requestId: crypto.randomUUID(),
+    });
+    setTestStarted(true);
+    setBusy(true);
+    setError(null);
+    setNotice('');
+    try {
+      const result = await api<{
+        status: 'sent' | 'sending' | 'uncertain';
+        recipient: string;
+      }>('/admin/email-template/test', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: testPayload.current,
+      });
+      setTestStatus(result.status);
+      setNotice(
+        result.status === 'sent'
+          ? `Test accepted by the email provider for ${result.recipient}. Check your inbox. The template and scheduled reminders are unchanged.`
+          : `Test delivery ${result.status === 'sending' ? 'is in progress or its outcome is unknown' : 'is uncertain'}. Check your inbox before starting another test. No automatic retry will send a second email.`,
+      );
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -181,6 +217,39 @@ export function EmailTemplateEditor({
               </button>
             </div>
           </fieldset>
+          <p className="formHint">
+            Preview the draft, then send a real test email only to your signed-in Sentry
+            address. Uses the configured sender with a [TEST] subject. The email binding
+            must allow your address. Tests do not reveal shows or change reminders.
+          </p>
+          <button
+            disabled={
+              busy || !preview || testStatus === 'sent' || testStatus === 'uncertain'
+            }
+            onClick={() => void sendTest()}
+          >
+            {testStarted ? 'Check test attempt' : 'Send test to me'}
+          </button>
+          {testStarted ? (
+            <button
+              disabled={busy}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    'Start a new test attempt? Check your inbox first: the previous email may already have arrived.',
+                  )
+                )
+                  return;
+                testPayload.current = null;
+                setTestStatus(null);
+                setTestStarted(false);
+                setNotice('');
+                setError(null);
+              }}
+            >
+              Start another test
+            </button>
+          ) : null}
           {preview ? (
             <>
               <h4>Draft preview — not sent</h4>

@@ -15,7 +15,6 @@ const config = (): ReminderEnv => ({
   SHOW_REMINDERS_ENABLED: 'true',
   SHOW_EMAIL: {send},
   SHOW_EMAIL_FROM: 'shows@example.test',
-  SHOW_SLACK_WEBHOOK: 'https://hooks.slack.com/services/test/test/test',
 });
 beforeEach(async () => {
   await env.DB.batch([
@@ -73,10 +72,7 @@ it.each([
         "SELECT is_hidden FROM show_and_tell_events WHERE id='show'",
       ).first(),
     ).toEqual({is_hidden: 1});
-    expect(await statuses()).toEqual([
-      {channel: 'email', status: 'pending'},
-      {channel: 'slack', status: 'pending'},
-    ]);
+    expect(await statuses()).toEqual([{channel: 'email', status: 'pending'}]);
     expect(send).not.toHaveBeenCalled();
     expect(slack).not.toHaveBeenCalled();
   },
@@ -89,7 +85,7 @@ it('does not require an origin while reminders are disabled', async () => {
     ),
   ).resolves.toBeUndefined();
 });
-it('reveals a due show and sends both channels once across concurrent and repeated ticks', async () => {
+it('reveals a due show and sends email once across concurrent and repeated ticks', async () => {
   await seed();
   await Promise.all([
     processShowReminders(config(), now),
@@ -97,17 +93,14 @@ it('reveals a due show and sends both channels once across concurrent and repeat
   ]);
   await processShowReminders(config(), now);
   expect(send).toHaveBeenCalledTimes(1);
-  expect(slack).toHaveBeenCalledTimes(1);
+  expect(slack).not.toHaveBeenCalled();
   expect(send.mock.calls[0]).toEqual([
     expect.objectContaining({
       to: 'team@sentry.io',
       text: expect.stringContaining('/events/show/october-show'),
     }),
   ]);
-  expect(await statuses()).toEqual([
-    {channel: 'email', status: 'sent'},
-    {channel: 'slack', status: 'sent'},
-  ]);
+  expect(await statuses()).toEqual([{channel: 'email', status: 'sent'}]);
   expect(
     await env.DB.prepare(
       "SELECT is_hidden FROM show_and_tell_events WHERE id='show'",
@@ -125,63 +118,28 @@ it('reveals a due show and sends both channels once across concurrent and repeat
   ).toEqual({is_hidden: 1});
 });
 it.each([null, '', '   ', 'Not/A_Timezone'])(
-  'sends email independently of invalid Slack timezone %s and records a definite Slack failure',
+  'sends email independently of stored display timezone %s',
   async (timezone) => {
     await seed();
     await env.DB.prepare("UPDATE show_and_tell_events SET timezone = ? WHERE id = 'show'")
       .bind(timezone)
       .run();
-    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      await processShowReminders(config(), now);
-      await processShowReminders(config(), now);
-      expect(send).toHaveBeenCalledTimes(1);
-      expect(send.mock.calls[0]).toEqual([
-        expect.objectContaining({
-          html: expect.stringContaining('October Show &amp; Tell'),
-          text: expect.stringContaining('/events/show/october-show'),
-        }),
-      ]);
-      expect(slack).not.toHaveBeenCalled();
-      expect(await statuses()).toEqual([
-        {channel: 'email', status: 'sent'},
-        {channel: 'slack', status: 'failed'},
-      ]);
-      expect(log).toHaveBeenCalledExactlyOnceWith('show_reminder_render_failed', {
-        eventId: 'show',
-        channel: 'slack',
-      });
-      // Correct and explicitly retry only the failed channel; never repeat email.
-      await env.DB.prepare(
-        "UPDATE show_and_tell_events SET timezone = 'America/Los_Angeles' WHERE id = 'show'",
-      ).run();
-      await env.DB.prepare(
-        "UPDATE show_reminders SET status = 'pending', retry_by = 'scheduler' WHERE event_id = 'show' AND channel = 'slack'",
-      ).run();
-      await processShowReminders(config(), now);
-      expect(send).toHaveBeenCalledTimes(1);
-      expect(slack).toHaveBeenCalledTimes(1);
-      expect(await statuses()).toEqual([
-        {channel: 'email', status: 'sent'},
-        {channel: 'slack', status: 'sent'},
-      ]);
-    } finally {
-      log.mockRestore();
-    }
+    await processShowReminders(config(), now);
+    await processShowReminders(config(), now);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(slack).not.toHaveBeenCalled();
+    expect(await statuses()).toEqual([{channel: 'email', status: 'sent'}]);
   },
 );
-it('records email rendering errors as failed before any provider call and still sends Slack', async () => {
+it('records email rendering errors as failed before any provider call', async () => {
   await seed();
   await env.DB.prepare(
     "UPDATE show_and_tell_events SET meeting_url = 'not-a-url' WHERE id = 'show'",
   ).run();
   await processShowReminders(config(), now);
   expect(send).not.toHaveBeenCalled();
-  expect(slack).toHaveBeenCalledTimes(1);
-  expect(await statuses()).toEqual([
-    {channel: 'email', status: 'failed'},
-    {channel: 'slack', status: 'sent'},
-  ]);
+  expect(slack).not.toHaveBeenCalled();
+  expect(await statuses()).toEqual([{channel: 'email', status: 'failed'}]);
 });
 it('does nothing when disabled and never contacts missing or unsafe delivery targets', async () => {
   await seed();
@@ -195,16 +153,12 @@ it('does nothing when disabled and never contacts missing or unsafe delivery tar
     {
       ...config(),
       SHOW_EMAIL: undefined,
-      SHOW_SLACK_WEBHOOK: 'https://evil.test/services/x',
     },
     now,
   );
   expect(send).not.toHaveBeenCalled();
   expect(slack).not.toHaveBeenCalled();
-  expect(await statuses()).toEqual([
-    {channel: 'email', status: 'pending'},
-    {channel: 'slack', status: 'pending'},
-  ]);
+  expect(await statuses()).toEqual([{channel: 'email', status: 'pending'}]);
 });
 it('skips cancelled, past and stale reminders while leaving future shows hidden', async () => {
   await seed('cancelled');
@@ -218,48 +172,21 @@ it('skips cancelled, past and stale reminders while leaving future shows hidden'
   expect(send).not.toHaveBeenCalled();
   expect(slack).not.toHaveBeenCalled();
   for (const id of ['cancelled', 'past', 'stale'])
-    expect(await statuses(id)).toEqual([
-      {channel: 'email', status: 'skipped'},
-      {channel: 'slack', status: 'skipped'},
-    ]);
+    expect(await statuses(id)).toEqual([{channel: 'email', status: 'skipped'}]);
   expect(
     await env.DB.prepare(
       "SELECT is_hidden FROM show_and_tell_events WHERE id='future'",
     ).first(),
   ).toEqual({is_hidden: 1});
 });
-it('does not retry ambiguous email acceptance and still sends Slack', async () => {
+it('does not retry ambiguous email acceptance', async () => {
   await seed();
   send.mockRejectedValueOnce(new Error('timeout'));
   await processShowReminders(config(), now);
   await processShowReminders(config(), now);
   expect(send).toHaveBeenCalledTimes(1);
-  expect(slack).toHaveBeenCalledTimes(1);
-  expect(await statuses()).toEqual([
-    {channel: 'email', status: 'uncertain'},
-    {channel: 'slack', status: 'sent'},
-  ]);
-});
-it('marks definitive Slack rejections failed without repeating accepted email', async () => {
-  await seed();
-  slack.mockResolvedValueOnce(new Response('channel_not_found', {status: 404}));
-  await processShowReminders(config(), now);
-  await processShowReminders(config(), now);
-  expect(await statuses()).toEqual([
-    {channel: 'email', status: 'sent'},
-    {channel: 'slack', status: 'failed'},
-  ]);
-  expect(send).toHaveBeenCalledTimes(1);
-  expect(slack).toHaveBeenCalledTimes(1);
-});
-it('treats Slack timeouts and server failures as uncertain, not safe to resend', async () => {
-  await seed();
-  slack.mockResolvedValueOnce(new Response('error', {status: 500}));
-  await processShowReminders(config(), now);
-  expect(await statuses()).toEqual([
-    {channel: 'email', status: 'sent'},
-    {channel: 'slack', status: 'uncertain'},
-  ]);
+  expect(slack).not.toHaveBeenCalled();
+  expect(await statuses()).toEqual([{channel: 'email', status: 'uncertain'}]);
 });
 it('recovers stale claims as uncertain instead of double-sending', async () => {
   await seed();
@@ -267,10 +194,7 @@ it('recovers stale claims as uncertain instead of double-sending', async () => {
     "UPDATE show_reminders SET status='sending',attempted_at='2030-09-30T16:00:00.000Z'",
   ).run();
   await processShowReminders(config(), now);
-  expect(await statuses()).toEqual([
-    {channel: 'email', status: 'uncertain'},
-    {channel: 'slack', status: 'uncertain'},
-  ]);
+  expect(await statuses()).toEqual([{channel: 'email', status: 'uncertain'}]);
   expect(send).not.toHaveBeenCalled();
 });
 it('blocks reschedule/cancel once delivery is claimed and preserves stable IDs before delivery', async () => {
@@ -288,4 +212,22 @@ it('blocks reschedule/cancel once delivery is claimed and preserves stable IDs b
       "UPDATE show_and_tell_events SET cancelled_at=CURRENT_TIMESTAMP,plan_updated_by='scheduler' WHERE id='show'",
     ).run(),
   ).rejects.toThrow('Delivery started');
+});
+
+it('ignores historical Slack records and legacy webhook configuration', async () => {
+  await seed();
+  await env.DB.prepare(
+    "INSERT INTO show_reminders (event_id,channel,status) VALUES ('show','slack','pending')",
+  ).run();
+  const legacy = {
+    ...config(),
+    SHOW_SLACK_WEBHOOK: 'https://hooks.slack.com/services/test/test/test',
+  };
+  await processShowReminders(legacy, now);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(slack).not.toHaveBeenCalled();
+  expect(await statuses()).toEqual([
+    {channel: 'email', status: 'sent'},
+    {channel: 'slack', status: 'pending'},
+  ]);
 });

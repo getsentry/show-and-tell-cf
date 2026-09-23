@@ -6,7 +6,6 @@ import {createSession} from '../../src/worker/services/sessions';
 import {synchronizeGoogleUser} from '../../src/worker/services/users';
 import type {ShowRemindersResponse} from '../../src/shared/reminders';
 import {defaultEmailTemplate, renderEmail} from '../../src/shared/email-template';
-import {reminderText} from '../../src/worker/services/show-reminders';
 
 const origin = 'https://showntell.test';
 beforeEach(async () => {
@@ -81,8 +80,8 @@ it('returns exact previews, destinations, due time and status without sending or
   expect(response.headers.get('Cache-Control')).toBe('private, no-store');
   const body = await response.json<ShowRemindersResponse>();
   expect(body.enabled).toBe(true);
-  expect(body.reminders).toHaveLength(2);
-  const [email, slack] = body.reminders;
+  expect(body.reminders).toHaveLength(1);
+  const [email] = body.reminders;
   expect(email).toMatchObject({
     channel: 'email',
     status: 'pending',
@@ -90,12 +89,6 @@ it('returns exact previews, destinations, due time and status without sending or
     timezone: 'America/Los_Angeles',
     destination: 'team@sentry.io',
     subject: '🎬 Special Show: submissions are open',
-    blockedReasons: [],
-  });
-  expect(slack).toMatchObject({
-    channel: 'slack',
-    destination: '#show-and-tell',
-    subject: null,
     blockedReasons: [],
   });
   expect(email.message).toBe(
@@ -112,25 +105,12 @@ it('returns exact previews, destinations, due time and status without sending or
     ).text,
   );
   expect(email.html).toContain('Upload your demo');
-  expect(slack.message).toBe(
-    reminderText(
-      {
-        id: 'planned-show',
-        title: 'Special Show',
-        slug: 'special-show',
-        starts_at: '2099-10-08T16:00:00.000Z',
-        timezone: 'America/Los_Angeles',
-        meeting_url: 'https://meet.google.com/abc-defg-hij',
-      },
-      origin,
-    ),
-  );
   expect(JSON.stringify(body)).not.toContain('SECRET');
   expect(JSON.stringify(body)).not.toContain('sender@example.test');
   expect(send).not.toHaveBeenCalled();
   expect(
     (await env.DB.prepare('SELECT status FROM show_reminders').all()).results,
-  ).toEqual([{status: 'pending'}, {status: 'pending'}]);
+  ).toEqual([{status: 'pending'}]);
 });
 it('shows disabled/unconfigured blockers and never returns a URL as a channel label', async () => {
   const admin = await user('admin', true);
@@ -146,18 +126,12 @@ it('shows disabled/unconfigured blockers and never returns a URL as a channel la
     'Automatic reminders are disabled.',
     'Email binding or sender is not configured.',
   ]);
-  expect(body.reminders[1]).toMatchObject({
-    destination: 'Slack channel not labeled',
-    blockedReasons: [
-      'Automatic reminders are disabled.',
-      'Slack webhook is not configured.',
-    ],
-  });
+  expect(body.reminders).toHaveLength(1);
   expect(JSON.stringify(body)).not.toContain('SECRET');
 });
 it('paginates deterministically and rejects malformed offsets', async () => {
   const admin = await user('admin', true);
-  for (let i = 0; i < 26; i++) await seed(admin.id, `show-${String(i).padStart(2, '0')}`);
+  for (let i = 0; i < 52; i++) await seed(admin.id, `show-${String(i).padStart(2, '0')}`);
   const first = await (await get(admin.cookie)).json<ShowRemindersResponse>();
   const second = await (
     await get(admin.cookie, '?offset=50')

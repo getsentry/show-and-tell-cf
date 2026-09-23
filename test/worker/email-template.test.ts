@@ -101,7 +101,7 @@ it('versioned saves persist, record the actor, and prevent stale overwrites with
   ).toEqual({count: 1});
   expect(
     (await env.DB.prepare('SELECT status FROM show_reminders').all()).results,
-  ).toEqual([{status: 'pending'}, {status: 'pending'}]);
+  ).toEqual([{status: 'pending'}]);
 });
 it('previews unsaved copy without writes and delivery uses exactly the saved HTML and text', async () => {
   const template = {

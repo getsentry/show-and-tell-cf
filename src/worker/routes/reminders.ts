@@ -3,11 +3,7 @@ import type {WorkerEnv} from '../index';
 import {requireRole} from '../middleware/user';
 import {eventSlug, submissionPath} from '../../shared/playlist';
 import type {ShowReminder, ShowRemindersResponse} from '../../shared/reminders';
-import {
-  reminderOrigin,
-  reminderText,
-  validSlackWebhook,
-} from '../services/show-reminders';
+import {reminderOrigin} from '../services/show-reminders';
 
 import {renderEmail} from '../../shared/email-template';
 import {readEmailTemplate} from '../services/email-template';
@@ -42,6 +38,7 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
     await c.env.DB.prepare(`SELECT e.id, e.title, e.slug, e.starts_at, e.reminder_at, e.timezone, e.meeting_url, e.cancelled_at,
       r.channel, r.status, r.attempted_at, r.completed_at
     FROM show_reminders r JOIN show_and_tell_events e ON e.id = r.event_id
+    WHERE r.channel = 'email'
     ORDER BY CASE WHEN r.status = 'pending' AND e.cancelled_at IS NULL AND e.starts_at > ? AND e.reminder_at >= ? THEN 0 ELSE 1 END,
       e.reminder_at, e.id, r.channel LIMIT 51 OFFSET ?`)
       .bind(timestamp, stale, offset)
@@ -52,12 +49,6 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
   } catch {
     /* Show configuration blocker without leaking the value. */
   }
-  // This is a non-secret, operator-maintained channel label, never a webhook URL.
-  const channelLabel = c.env.SHOW_SLACK_CHANNEL;
-  const slackDestination =
-    channelLabel && /^#[a-z0-9_-]{1,80}$/.test(channelLabel)
-      ? channelLabel
-      : 'Slack channel not labeled';
   const {template} = await readEmailTemplate(c.env.DB);
   const reminders = results.slice(0, 50).map((row): ShowReminder => {
     const blockedReasons: string[] = [];
@@ -68,21 +59,17 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
     else if (row.reminder_at < stale && row.status === 'pending')
       blockedReasons.push('The 24-hour catch-up window has expired.');
     if (!origin) blockedReasons.push('Configure an HTTPS APP_ORIGIN.');
-    if (row.channel === 'email' && (!c.env.SHOW_EMAIL || !c.env.SHOW_EMAIL_FROM))
+    if (!c.env.SHOW_EMAIL || !c.env.SHOW_EMAIL_FROM)
       blockedReasons.push('Email binding or sender is not configured.');
-    if (row.channel === 'slack' && !validSlackWebhook(c.env.SHOW_SLACK_WEBHOOK))
-      blockedReasons.push('Slack webhook is not configured.');
     let message: string | null = null;
     let subject: string | null = null;
     let html: string | null = null;
     if (origin) {
       try {
-        if (row.channel === 'email') {
-          const email = renderEmail(template, row, origin);
-          message = email.text;
-          subject = email.subject;
-          html = email.html;
-        } else message = reminderText(row, origin);
+        const email = renderEmail(template, row, origin);
+        message = email.text;
+        subject = email.subject;
+        html = email.html;
       } catch {
         blockedReasons.push('The show date or timezone needs correction.');
       }
@@ -94,7 +81,7 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
       status: row.status,
       scheduledAt: row.reminder_at,
       timezone: row.timezone,
-      destination: row.channel === 'email' ? 'team@sentry.io' : slackDestination,
+      destination: 'team@sentry.io',
       blockedReasons,
       subject,
       html,

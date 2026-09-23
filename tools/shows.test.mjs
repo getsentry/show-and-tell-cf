@@ -37,7 +37,7 @@ test('rejects ambiguous dates, impossible dates, past reminders, bad timezone an
     assert.throws(() => normalizePlan({...input, ...changes}, now));
   }
 });
-test('migration and create SQL atomically create one hidden show, two deliveries and one audit', () => {
+test('migration and create SQL atomically create one hidden show, one email delivery and one audit', () => {
   const db = new DatabaseSync(':memory:');
   try {
     for (const file of readdirSync(new URL('../migrations/', import.meta.url)).sort())
@@ -56,7 +56,7 @@ test('migration and create SQL atomically create one hidden show, two deliveries
       db.prepare('SELECT is_hidden FROM show_and_tell_events').get().is_hidden,
       1,
     );
-    assert.equal(db.prepare('SELECT COUNT(*) count FROM show_reminders').get().count, 2);
+    assert.equal(db.prepare('SELECT COUNT(*) count FROM show_reminders').get().count, 1);
     assert.equal(db.prepare('SELECT COUNT(*) count FROM show_plan_audit').get().count, 1);
     assert.throws(() =>
       db.exec(
@@ -68,6 +68,47 @@ test('migration and create SQL atomically create one hidden show, two deliveries
     assert.equal(
       db.prepare('SELECT COUNT(*) count FROM show_and_tell_events').get().count,
       1,
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test('email-only migration retires unsent Slack work, preserves history and does not requeue it', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const files = readdirSync(new URL('../migrations/', import.meta.url)).sort();
+    const migration = files.find((file) => file.startsWith('0009_'));
+    for (const file of files.filter((file) => file < migration))
+      db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
+    db.exec(
+      "INSERT INTO users(id,email,display_name,is_admin) VALUES ('admin','admin@sentry.io','Admin',1)",
+    );
+    for (const state of ['pending', 'failed', 'sent', 'sending', 'uncertain']) {
+      const plan = normalizePlan({...input, key: state}, now);
+      db.exec(createSql(plan));
+      db.exec(
+        `UPDATE show_reminders SET status='${state}' WHERE event_id='${plan.id}' AND channel='slack'`,
+      );
+    }
+    db.exec(readFileSync(new URL(`../migrations/${migration}`, import.meta.url), 'utf8'));
+    const pendingId = normalizePlan({...input, key: 'pending'}, now).id;
+    db.exec(
+      `UPDATE show_and_tell_events SET starts_at='2030-10-09T16:00:00.000Z',plan_updated_by='admin' WHERE id='${pendingId}'`,
+    );
+    const states = db
+      .prepare("SELECT status FROM show_reminders WHERE channel='slack' ORDER BY status")
+      .all()
+      .map((row) => row.status);
+    assert.deepEqual(states, ['sent', 'skipped', 'skipped', 'uncertain', 'uncertain']);
+    const newPlan = normalizePlan({...input, key: 'new'}, now);
+    db.exec(createSql(newPlan));
+    assert.deepEqual(
+      db
+        .prepare('SELECT channel FROM show_reminders WHERE event_id=?')
+        .all(newPlan.id)
+        .map((row) => row.channel),
+      ['email'],
     );
   } finally {
     db.close();

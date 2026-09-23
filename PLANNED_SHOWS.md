@@ -1,6 +1,6 @@
 # Planned Shows
 
-Operating guide for [Show & Tell](https://showandtell.sentry.new). The approved list of individual shows is the schedule, including special events. Junior accepts plain English, confirms dates and destinations, and uses `tools/shows.mjs` to manage them.
+Operating guide for [Show & Tell](https://showandtell.sentry.new). The approved list of individual shows is the schedule, including special events. Junior accepts plain English, confirms dates and email delivery, and uses `tools/shows.mjs` to manage them.
 
 ## Visibility And Links
 
@@ -46,7 +46,7 @@ node tools/shows.mjs create /path/to/plan.json --remote
 node tools/shows.mjs create /path/to/plan.json --remote --apply
 ```
 
-Creation writes a hidden show, separate email/Slack delivery records and an audit record together. Verify the returned records and share the submission link. All mutation commands are dry runs unless `--apply` is supplied. After a timeout, read back state before repeating a mutation.
+Creation writes a hidden show, an email delivery record and an audit record together. Verify the returned records and share the submission link. All mutation commands are dry runs unless `--apply` is supplied. After a timeout, read back state before repeating a mutation.
 
 ## Reschedule, Cancel Or Retry
 
@@ -54,7 +54,7 @@ Read the existing show and prepare a change containing `id`, `actor`, and `expec
 
 - `reschedule` also requires `startsAt` and `timezone`, with optional `reminderAt`. It preserves the ID, slug and submissions, hides the show again, and resets reveal state and unsent reminders.
 - `cancel` hides the show and suppresses pending reminders without deleting its submissions or links.
-- `retry` also requires `channel: "email" | "slack"`. It requeues only a definitively failed delivery within the 24-hour sending window.
+- `retry` also requires `channel: "email"`. It requeues only a definitively failed delivery within the 24-hour sending window.
 
 ```bash
 node tools/shows.mjs reschedule /path/to/change.json --remote
@@ -63,19 +63,19 @@ node tools/shows.mjs retry /path/to/change.json --remote
 # Confirm the preview, then repeat the chosen command with --apply.
 ```
 
-Date changes and cancellation are blocked once either channel is in flight, accepted or uncertain. Reconcile delivery and coordinate an explicit correction rather than resetting successful/uncertain sends. The operator does not support title/Meet URL edits or automated post-announcement corrections.
+Date changes and cancellation are blocked once a delivery is in flight, accepted or uncertain. Reconcile delivery and coordinate an explicit correction rather than resetting successful/uncertain sends. The operator does not support title/Meet URL edits or automated post-announcement corrections.
 
 ## Reveal And Delivery
 
-Cloudflare's hourly cron owns both reveal and delivery. With `SHOW_REMINDERS_ENABLED=true`, the first tick after the reminder time reveals the upcoming show once and attempts each configured channel. This can be up to one hour after the requested time. A later manual hide is respected.
+Cloudflare's hourly cron owns reveal and email delivery. With `SHOW_REMINDERS_ENABLED=true`, the first tick after the reminder time reveals the upcoming show once and attempts email delivery. This can be up to one hour after the requested time. A later manual hide is respected.
 
-Email goes to `team@sentry.io` with the submission link in the body. Slack uses the configured incoming webhook's channel and identity. Its channel label is informational; it does not change routing. Messages do not add broad mentions. Do not schedule duplicate sends through Junior.
+Email goes to `team@sentry.io` with the submission link in the body. The app does not send Slack reminders and requires no Slack app, token or webhook. People can ask Junior about shows in Slack; do not schedule duplicate reminder sends there.
 
-Each channel is claimed independently, so a Slack failure does not resend accepted email. Pending reminders have a 24-hour catch-up window. Older, past or canceled deliveries become `skipped`; an overdue future show can still be revealed.
+Each email reminder is claimed atomically to avoid duplicate sends. Pending reminders have a 24-hour catch-up window. Older, past or canceled deliveries become `skipped`; an overdue future show can still be revealed.
 
 ## Reminder Status And Troubleshooting
 
-Admins open **View reminders** to see scheduled times, destinations, HTML/plain-text previews, per-channel status, configuration blockers and attempt/result timestamps. Opening the list or a preview does not send anything. Member view cannot access it. Previews use current settings rather than archived sent content.
+Admins open **View reminders** to see scheduled times, destinations, HTML/plain-text previews, email status, configuration blockers and attempt/result timestamps. Opening the list or a preview does not send anything. Member view cannot access it. Previews use current settings rather than archived sent content.
 
 - `pending`: awaiting its time or required configuration.
 - `sending`: a worker has claimed the delivery.
@@ -84,7 +84,7 @@ Admins open **View reminders** to see scheduled times, destinations, HTML/plain-
 - `uncertain`: a timeout, ambiguous provider error or stale in-flight claim. Reconcile provider evidence before retrying because the original may have arrived.
 - `skipped`: outside the catch-up window, past or canceled.
 
-Use the CLI list, scoped Worker logs (`show_reminder_delivery` and failure diagnostics), and provider evidence to investigate. Do not expose webhook secrets or raw provider errors in reports.
+Use the CLI list, scoped Worker logs (`show_reminder_delivery` and failure diagnostics), and provider evidence to investigate. Do not expose sender secrets or raw provider errors in reports.
 
 ### Configuration Reference
 
@@ -93,10 +93,16 @@ Read current configuration when investigating a delivery blocker; these are not 
 - `SHOW_REMINDERS_ENABLED`: controls automatic reveal and new sends. Turning it off does not revoke requests already in flight.
 - `APP_ORIGIN`: HTTPS base URL for submission links.
 - `SHOW_EMAIL` and `SHOW_EMAIL_FROM`: Cloudflare email binding and onboarded sender for the team mailing list.
-- `SHOW_SLACK_WEBHOOK`: secret incoming webhook that determines the Slack destination.
-- `SHOW_SLACK_CHANNEL`: non-secret `#channel` label displayed to admins. Keep it aligned with the actual webhook destination.
 
-Use the approved infrastructure workflow for configuration changes and isolated recipients/channels for delivery tests.
+Use the approved infrastructure workflow for configuration changes. Keep the team list protected from external posting: a Sentry From address alone does not establish Workspace-internal delivery. IT should approve the sender/relay or an authenticated forwarding route. A successful personal test does not prove the team list will accept that sender.
+
+## Send A Test Email
+
+In **View reminders → Edit email template**, select a show, preview the draft and click **Send test to me**. It sends the current unsaved draft through the same `SHOW_EMAIL` binding and `SHOW_EMAIL_FROM` sender, with a `[TEST]` subject prefix, only to the signed-in admin's Sentry address. Recipient overrides are not supported. Member view cannot send tests.
+
+Tests work independently of `SHOW_REMINDERS_ENABLED` and do not save the template, reveal a show, or modify scheduled delivery records. They have a separate attempt ledger. Rechecking the same attempt never resends; distinct attempts are limited to one per admin per minute. For uncertain results, check your inbox before explicitly starting another test.
+
+The email binding must permit the admin's test address in addition to the scheduled recipient. If it is restricted to `team@sentry.io`, use an approved recipient allowlist including the test admin rather than removing all destination restrictions. A provider error can be ambiguous; the UI does not display raw provider details or retry automatically. Provider acceptance is not confirmed inbox delivery.
 
 ## Editable Email Template
 
@@ -108,7 +114,7 @@ Supported placeholders: `{{title}}`, `{{show_times}}`, `{{demo_minutes}}`. The g
 
 The email includes emoji accents, one submission card/button, a literal submission URL, and a linked newcomer sentence. In **Help and contacts**, separate sections with blank lines; the first line becomes a bold label and the following lines are regular text. Avoid hardcoded relative dates or seasonal timezone abbreviations in reusable copy.
 
-HTML and plain-text delivery use the same renderer as previews. Editable copy is escaped text, not executable HTML. Template revisions record actor and timestamp and prevent stale overwrites. A save does not change a scheduler run already underway, accepted mail, or Slack copy.
+HTML and plain-text delivery use the same renderer as previews. Editable copy is escaped text, not executable HTML. Template revisions record actor and timestamp and prevent stale overwrites. A save does not change a scheduler run already underway, accepted mail, or already-sent content.
 
 ## Implementation Map
 
@@ -118,3 +124,5 @@ HTML and plain-text delivery use the same renderer as previews. Editable copy is
 - `src/worker/services/email-template.ts`: stored template revisions and compatibility handling.
 - `src/worker/routes/reminders.ts` and `src/worker/routes/email-template.ts`: admin status and template APIs.
 - `src/app/ReminderList.tsx` and `src/app/EmailTemplateEditor.tsx`: admin interface.
+
+Historical Slack delivery rows are retained for audit but are not shown as active reminders. Unsent Slack work is retired, and the scheduler and operator only send/retry email. Historical accepted or uncertain deliveries still protect against silently changing an announced show.

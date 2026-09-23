@@ -1,5 +1,4 @@
-import {eventSlug, submissionPath} from '../../shared/playlist';
-import {renderEmail} from '../../shared/email-template';
+import {renderEmail, type EmailShow} from '../../shared/email-template';
 import {readEmailTemplate} from './email-template';
 
 export interface ReminderEnv {
@@ -7,33 +6,8 @@ export interface ReminderEnv {
   APP_ORIGIN?: string;
   SHOW_REMINDERS_ENABLED?: string;
   SHOW_EMAIL_FROM?: string;
-  SHOW_SLACK_WEBHOOK?: string;
-  SHOW_SLACK_CHANNEL?: string;
   SHOW_EMAIL?: SendEmail;
 }
-interface PlannedShow {
-  id: string;
-  title: string;
-  slug: string;
-  starts_at: string;
-  timezone: string | null;
-  meeting_url: string | null;
-}
-
-export function reminderText(show: PlannedShow, origin: string) {
-  if (!show.timezone?.trim()) throw new Error('Configure a valid show timezone.');
-  const date = new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'full',
-    timeStyle: 'short',
-    timeZone: show.timezone,
-  }).format(new Date(show.starts_at));
-  const link = new URL(
-    submissionPath(show.id, show.slug || eventSlug(show.title)),
-    origin,
-  ).href;
-  return `${show.title}\n${date} (${show.timezone})\n\nHave something to demo? Add your submission and upload your video:\n${link}\n\nSentry login required.${show.meeting_url ? `\nJoin the show: ${show.meeting_url}` : ''}`;
-}
-
 export function reminderOrigin(value?: string) {
   if (!value || !URL.canParse(value)) throw new ReminderConfigurationError();
   const origin = new URL(value);
@@ -49,7 +23,7 @@ export class ReminderConfigurationError extends Error {
   }
 }
 
-/** At-most-one automatic attempt per channel. Uncertain acceptance requires operator review. */
+/** At-most-one automatic attempt per email reminder. Uncertain acceptance requires operator review. */
 export async function processShowReminders(env: ReminderEnv, now = new Date()) {
   if (env.SHOW_REMINDERS_ENABLED !== 'true') return;
   const origin = reminderOrigin(env.APP_ORIGIN);
@@ -58,11 +32,11 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
   const stale = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   await env.DB.batch([
     env.DB.prepare(`UPDATE show_reminders SET status = 'uncertain'
-      WHERE status = 'sending' AND attempted_at < ?`).bind(
+      WHERE channel = 'email' AND status = 'sending' AND attempted_at < ?`).bind(
       new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
     ),
     env.DB.prepare(`UPDATE show_reminders SET status = 'skipped'
-      WHERE status = 'pending' AND event_id IN (
+      WHERE channel = 'email' AND status = 'pending' AND event_id IN (
         SELECT id FROM show_and_tell_events WHERE cancelled_at IS NOT NULL OR starts_at <= ? OR reminder_at < ?
       )`).bind(timestamp, stale),
     env.DB.prepare(`UPDATE show_and_tell_events SET is_hidden = 0, revealed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
@@ -74,113 +48,55 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
   const {results} = await env.DB.prepare(`SELECT DISTINCT e.id FROM show_and_tell_events e
     JOIN show_reminders r ON r.event_id = e.id
     WHERE e.cancelled_at IS NULL AND e.reminder_at <= ? AND e.reminder_at >= ? AND e.starts_at > ?
-      AND r.status = 'pending' ORDER BY e.reminder_at LIMIT 20`)
+      AND r.channel = 'email' AND r.status = 'pending' ORDER BY e.reminder_at LIMIT 20`)
     .bind(timestamp, stale, timestamp)
     .all<{id: string}>();
   for (const {id} of results) {
-    for (const channel of ['email', 'slack'] as const) {
-      if (channel === 'email' && (!env.SHOW_EMAIL || !env.SHOW_EMAIL_FROM)) continue;
-      if (channel === 'slack' && !validSlackWebhook(env.SHOW_SLACK_WEBHOOK)) continue;
-      const claimed =
-        await env.DB.prepare(`UPDATE show_reminders SET status = 'sending', attempted_at = ?
+    const channel = 'email';
+    if (!env.SHOW_EMAIL || !env.SHOW_EMAIL_FROM) continue;
+    const claimed =
+      await env.DB.prepare(`UPDATE show_reminders SET status = 'sending', attempted_at = ?
         WHERE event_id = ? AND channel = ? AND status = 'pending'
         AND EXISTS (SELECT 1 FROM show_and_tell_events WHERE id = ? AND cancelled_at IS NULL
           AND reminder_at <= ? AND reminder_at >= ? AND starts_at > ?)
         RETURNING event_id`)
-          .bind(timestamp, id, channel, id, timestamp, stale, timestamp)
-          .first();
-      if (!claimed) continue;
-      // The DB trigger now prevents date changes/cancellation until delivery is reconciled.
-      let status: 'sent' | 'failed' | 'uncertain' = 'uncertain';
-      let providerId: string | null = null;
-      let deliveryStarted = false;
-      try {
-        const show = await env.DB.prepare(
-          'SELECT * FROM show_and_tell_events WHERE id = ?',
-        )
-          .bind(id)
-          .first<PlannedShow>();
-        if (!show) throw new Error('Planned show missing');
-        if (channel === 'email') {
-          const email = renderEmail(template, show, origin);
-          deliveryStarted = true;
-          const result = await env.SHOW_EMAIL!.send({
-            from: env.SHOW_EMAIL_FROM!,
-            to: 'team@sentry.io',
-            ...email,
-          });
-          providerId = result.messageId;
-          status = 'sent';
-        } else {
-          const text = reminderText(show, origin);
-          const submissionUrl = new URL(
-            submissionPath(show.id, show.slug || eventSlug(show.title)),
-            origin,
-          ).href;
-          deliveryStarted = true;
-          const response = await fetch(env.SHOW_SLACK_WEBHOOK!, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            // plain_text avoids treating a title as mentions or Slack markup.
-            body: JSON.stringify({
-              text: `Show & Tell submissions are open: ${submissionUrl}`,
-              mrkdwn: false,
-              blocks: [
-                {type: 'section', text: {type: 'plain_text', text}},
-                {
-                  type: 'actions',
-                  elements: [
-                    {
-                      type: 'button',
-                      text: {type: 'plain_text', text: 'Submit your demo'},
-                      url: submissionUrl,
-                    },
-                  ],
-                },
-              ],
-            }),
-            redirect: 'error',
-            signal: AbortSignal.timeout(15000),
-          });
-          if (response.ok && (await response.text()).trim() === 'ok') status = 'sent';
-          else if (response.status >= 400 && response.status < 500) status = 'failed';
-        }
-      } catch {
-        // Rendering failures cannot have reached a provider and are safe to retry
-        // after correction. Once a provider call starts, preserve at-most-once safety.
-        status = deliveryStarted ? 'uncertain' : 'failed';
-        // Never log raw errors: they can contain webhook secrets or message bodies.
-        console.error(
-          deliveryStarted
-            ? 'show_reminder_delivery_uncertain'
-            : 'show_reminder_render_failed',
-          {eventId: id, channel},
-        );
-      }
-      await env.DB.prepare(`UPDATE show_reminders SET status = ?, completed_at = ?, provider_id = ?
-        WHERE event_id = ? AND channel = ? AND status IN ('sending', 'uncertain')`)
-        .bind(status, timestamp, providerId, id, channel)
-        .run();
-      console.info('show_reminder_delivery', {eventId: id, channel, status});
+        .bind(timestamp, id, channel, id, timestamp, stale, timestamp)
+        .first();
+    if (!claimed) continue;
+    // The DB trigger now prevents date changes/cancellation until delivery is reconciled.
+    let status: 'sent' | 'failed' | 'uncertain' = 'uncertain';
+    let providerId: string | null = null;
+    let deliveryStarted = false;
+    try {
+      const show = await env.DB.prepare('SELECT * FROM show_and_tell_events WHERE id = ?')
+        .bind(id)
+        .first<EmailShow>();
+      if (!show) throw new Error('Planned show missing');
+      const email = renderEmail(template, show, origin);
+      deliveryStarted = true;
+      const result = await env.SHOW_EMAIL.send({
+        from: env.SHOW_EMAIL_FROM,
+        to: 'team@sentry.io',
+        ...email,
+      });
+      providerId = result.messageId;
+      status = 'sent';
+    } catch {
+      // Rendering failures cannot have reached a provider and are safe to retry
+      // after correction. Once a provider call starts, preserve at-most-once safety.
+      status = deliveryStarted ? 'uncertain' : 'failed';
+      // Never log raw errors: they can contain sender details or message bodies.
+      console.error(
+        deliveryStarted
+          ? 'show_reminder_delivery_uncertain'
+          : 'show_reminder_render_failed',
+        {eventId: id, channel},
+      );
     }
-  }
-}
-
-export function validSlackWebhook(value?: string) {
-  if (!value) return false;
-  try {
-    const url = new URL(value);
-    return (
-      url.protocol === 'https:' &&
-      url.hostname === 'hooks.slack.com' &&
-      !url.port &&
-      !url.username &&
-      !url.password &&
-      !url.search &&
-      !url.hash &&
-      /^\/services\/[A-Za-z0-9/_-]+$/.test(url.pathname)
-    );
-  } catch {
-    return false;
+    await env.DB.prepare(`UPDATE show_reminders SET status = ?, completed_at = ?, provider_id = ?
+        WHERE event_id = ? AND channel = ? AND status IN ('sending', 'uncertain')`)
+      .bind(status, timestamp, providerId, id, channel)
+      .run();
+    console.info('show_reminder_delivery', {eventId: id, channel, status});
   }
 }

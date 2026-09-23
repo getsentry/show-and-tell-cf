@@ -1,7 +1,7 @@
 export interface ShowReminder {
   eventId: string;
   eventTitle: string;
-  channel: 'email' | 'slack';
+  channel: 'email';
   status: 'pending' | 'sending' | 'sent' | 'uncertain' | 'failed' | 'skipped';
   scheduledAt: string;
   timezone: string;

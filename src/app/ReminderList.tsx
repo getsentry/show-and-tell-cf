@@ -71,8 +71,7 @@ export function ReminderList() {
           </p>
           <p className="formHint">
             Previews and destinations reflect current configuration, not a historical
-            sent-message archive. Slack channel labels are configured by an operator; the
-            webhook controls the actual destination.
+            sent-message archive. Automatic reminders are email only.
           </p>
           {data.reminders.length ? (
             <ul className="reminderList">
@@ -93,10 +92,7 @@ export function ReminderList() {
                     <dl className="reminderMetadata">
                       <div>
                         <dt>Where</dt>
-                        <dd>
-                          {reminder.channel === 'email' ? 'Email' : 'Slack'} ·{' '}
-                          {reminder.destination}
-                        </dd>
+                        <dd>Email · {reminder.destination}</dd>
                       </div>
                       <div>
                         <dt>Due</dt>
@@ -151,11 +147,6 @@ export function ReminderList() {
                       ) : (
                         <p>Preview unavailable. Check the configuration and show date.</p>
                       )}
-                      {reminder.channel === 'slack' && reminder.submissionUrl ? (
-                        <p>
-                          Button: <a href={reminder.submissionUrl}>Submit your demo</a>
-                        </p>
-                      ) : null}
                     </details>
                   </article>
                 </li>
