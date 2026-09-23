@@ -30,12 +30,21 @@ export function reminderText(show: PlannedShow, origin: string) {
   return `${show.title}\n${date} (${show.timezone})\n\nHave something to demo? Add your submission and upload your video:\n${link}\n\nSentry login required.${show.meeting_url ? `\nJoin the show: ${show.meeting_url}` : ''}`;
 }
 
+// Fixed diagnostic only: never include configured URLs or provider errors.
+export class ReminderConfigurationError extends Error {
+  constructor() {
+    super('Configure an HTTPS APP_ORIGIN before enabling reminders');
+  }
+}
+
 /** At-most-one automatic attempt per channel. Uncertain acceptance requires operator review. */
 export async function processShowReminders(env: ReminderEnv, now = new Date()) {
   if (env.SHOW_REMINDERS_ENABLED !== 'true') return;
-  const origin = new URL(env.APP_ORIGIN || '');
+  if (!env.APP_ORIGIN || !URL.canParse(env.APP_ORIGIN))
+    throw new ReminderConfigurationError();
+  const origin = new URL(env.APP_ORIGIN);
   if (origin.protocol !== 'https:' || origin.username || origin.password)
-    throw new Error('Configure an HTTPS APP_ORIGIN before enabling reminders');
+    throw new ReminderConfigurationError();
   const timestamp = now.toISOString();
   const stale = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   await env.DB.batch([

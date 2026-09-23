@@ -1,4 +1,5 @@
-import {env} from 'cloudflare:test';
+import {env, createScheduledController} from 'cloudflare:test';
+import worker from '../../src/worker';
 import {beforeEach, afterEach, expect, it, vi} from 'vitest';
 import {
   processShowReminders,
@@ -49,6 +50,45 @@ async function statuses(id = 'show') {
       .all()
   ).results;
 }
+it.each([
+  undefined,
+  '',
+  '   ',
+  'not-a-url',
+  'http://example.test',
+  'https://user:secret@example.test',
+])(
+  'reports a safe configuration diagnostic for origin %s before revealing or sending',
+  async (origin) => {
+    await seed();
+    const bindings = {...config(), APP_ORIGIN: origin};
+    await expect(processShowReminders(bindings, now)).rejects.toThrow(
+      'Configure an HTTPS APP_ORIGIN before enabling reminders',
+    );
+    await expect(
+      worker.scheduled(createScheduledController(), {...bindings, VIDEOS: env.VIDEOS}),
+    ).rejects.toThrow('Configure an HTTPS APP_ORIGIN before enabling reminders');
+    expect(
+      await env.DB.prepare(
+        "SELECT is_hidden FROM show_and_tell_events WHERE id='show'",
+      ).first(),
+    ).toEqual({is_hidden: 1});
+    expect(await statuses()).toEqual([
+      {channel: 'email', status: 'pending'},
+      {channel: 'slack', status: 'pending'},
+    ]);
+    expect(send).not.toHaveBeenCalled();
+    expect(slack).not.toHaveBeenCalled();
+  },
+);
+it('does not require an origin while reminders are disabled', async () => {
+  await expect(
+    processShowReminders(
+      {...config(), APP_ORIGIN: undefined, SHOW_REMINDERS_ENABLED: 'false'},
+      now,
+    ),
+  ).resolves.toBeUndefined();
+});
 it('reveals a due show and sends both channels once across concurrent and repeated ticks', async () => {
   await seed();
   await Promise.all([
