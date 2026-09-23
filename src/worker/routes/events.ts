@@ -32,10 +32,10 @@ eventRoutes.get('/', async (c) => {
      FROM show_and_tell_events e
      LEFT JOIN submissions s ON s.event_id = e.id AND s.deleted_at IS NULL
        AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
-     WHERE e.is_hidden = 0 AND e.cancelled_at IS NULL
+     WHERE (e.is_hidden = 0 OR ? = 'admin') AND e.cancelled_at IS NULL
      GROUP BY e.id ORDER BY e.created_at DESC`,
   )
-    .bind(c.get('user').role, c.get('user').id)
+    .bind(c.get('user').role, c.get('user').id, c.get('user').role)
     .all<EventRow>();
   const response: EventsResponse = {events: result.results.map(toEvent)};
   return c.json(response);

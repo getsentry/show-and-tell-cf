@@ -4,7 +4,9 @@ The approved event list, not a monthly recurrence, is the source of truth. Junio
 
 ## Visibility And Links
 
-`is_hidden` hides a playlist from the overview for everyone, including admins. Direct submission and screening links remain usable by authenticated Sentry users. This is discoverability, not authorization. Submission moderation remains unchanged.
+`is_hidden` hides a playlist from the member overview. Admins still see it in their overview and playlist navigation, marked **Hidden**. Admins switched to user view get the same filtered list as members. Canceled shows remain excluded from the overview for everyone. Direct submission and screening links remain usable by authenticated Sentry users. This is discoverability, not authorization. Submission moderation remains unchanged.
+
+Admins can open **View reminders** on the overview for a read-only, paginated list of email/Slack reminders: due time in the show's timezone and UTC, current destination, delivery status, configuration blockers, message preview, and attempt/result timestamps. It uses the same message builder as the sender and does not trigger delivery. Member view cannot access it. Previews reflect current settings, not a historical delivery archive.
 
 New share links are `/events/{id}/{slug}` and `/playlists/{id}/{slug}`. The ID is authoritative; an old or different valid slug still loads the same event. The UI replaces it with the current canonical slug. Old ID-only and `/?event=...` links still work, including through Google login. Free-form URL labels normalize to lowercase ASCII hyphenated slugs; uniqueness is not needed because IDs are retained. Existing playlists derive a label from their title without a data rewrite.
 
@@ -80,7 +82,7 @@ Before enabling:
    }
    ```
    Set `SHOW_EMAIL_FROM` to the same onboarded sender. Cloudflare sends to verified destinations for free; arbitrary recipients require Workers Paid. Confirm recipient readiness in the account.
-3. Obtain an approved channel-specific Slack incoming webhook. Store `SHOW_SLACK_WEBHOOK` as a Worker secret, never in Git, a plan file, or Slack conversation. Do not reuse Junior's runtime bot credentials.
+3. Obtain an approved channel-specific Slack incoming webhook. Store `SHOW_SLACK_WEBHOOK` as a Worker secret, never in Git, a plan file, or Slack conversation. Set the non-secret `SHOW_SLACK_CHANNEL` label (for example `#show-and-tell`) alongside it so the admin reminder list names the destination. Confirm that this label matches the webhook's actual channel; changing the label does not change delivery routing. Without a valid label, the list says the channel is not labeled rather than guessing. Do not reuse Junior's runtime bot credentials.
 4. Test using a separate test Worker/database, a test mailbox, and a test-channel webhook; do not use `team@sentry.io` as a test destination. The production code deliberately fixes that recipient, so use a reviewed test-only configuration/code change in the isolated test environment.
 5. Run verification and approve deployment. Read back the planned events and exact reveal/send times. Enable `SHOW_REMINDERS_ENABLED` in the managed config only after both channels are ready. The same flag pauses reveal and new sends; it cannot revoke requests already in flight.
 6. Confirm the first real reminder in the actual mailbox/list and channel, then check both delivery rows. No scheduled Junior task should send the same reminders. An optional read-only Junior health summary can report pending/failed/uncertain/skipped deliveries.

@@ -81,10 +81,10 @@ it.each([null, '2030-09-01T00:00:00Z'])(
     expect(window.location.pathname).toBe('/events/id/october-special');
     if (cancelledAt) {
       expect(
-        screen.queryByRole('button', {name: 'Show on overview'}),
+        screen.queryByRole('button', {name: 'Show on member overview'}),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', {name: 'Hide from overview'}),
+        screen.queryByRole('button', {name: 'Hide from member overview'}),
       ).not.toBeInTheDocument();
       expect(
         screen.getByText(
@@ -92,10 +92,14 @@ it.each([null, '2030-09-01T00:00:00Z'])(
         ),
       ).toBeInTheDocument();
       expect(
-        screen.queryByText('Hidden from overview. This link still works.'),
+        screen.queryByText(
+          'Hidden from the member overview. Admins can still see it, and this link still works.',
+        ),
       ).not.toBeInTheDocument();
     } else {
-      expect(screen.getByRole('button', {name: 'Show on overview'})).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {name: 'Show on member overview'}),
+      ).toBeInTheDocument();
     }
     fireEvent.click(screen.getByRole('button', {name: 'Copy submission link'}));
     expect(writeText).toHaveBeenCalledWith(

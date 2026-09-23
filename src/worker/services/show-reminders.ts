@@ -6,6 +6,7 @@ export interface ReminderEnv {
   SHOW_REMINDERS_ENABLED?: string;
   SHOW_EMAIL_FROM?: string;
   SHOW_SLACK_WEBHOOK?: string;
+  SHOW_SLACK_CHANNEL?: string;
   SHOW_EMAIL?: SendEmail;
 }
 interface PlannedShow {
@@ -30,6 +31,18 @@ export function reminderText(show: PlannedShow, origin: string) {
   return `${show.title}\n${date} (${show.timezone})\n\nHave something to demo? Add your submission and upload your video:\n${link}\n\nSentry login required.${show.meeting_url ? `\nJoin the show: ${show.meeting_url}` : ''}`;
 }
 
+export function reminderSubject(title: string) {
+  return `Submit your demo: ${title}`;
+}
+
+export function reminderOrigin(value?: string) {
+  if (!value || !URL.canParse(value)) throw new ReminderConfigurationError();
+  const origin = new URL(value);
+  if (origin.protocol !== 'https:' || origin.username || origin.password)
+    throw new ReminderConfigurationError();
+  return origin.origin;
+}
+
 // Fixed diagnostic only: never include configured URLs or provider errors.
 export class ReminderConfigurationError extends Error {
   constructor() {
@@ -40,11 +53,7 @@ export class ReminderConfigurationError extends Error {
 /** At-most-one automatic attempt per channel. Uncertain acceptance requires operator review. */
 export async function processShowReminders(env: ReminderEnv, now = new Date()) {
   if (env.SHOW_REMINDERS_ENABLED !== 'true') return;
-  if (!env.APP_ORIGIN || !URL.canParse(env.APP_ORIGIN))
-    throw new ReminderConfigurationError();
-  const origin = new URL(env.APP_ORIGIN);
-  if (origin.protocol !== 'https:' || origin.username || origin.password)
-    throw new ReminderConfigurationError();
+  const origin = reminderOrigin(env.APP_ORIGIN);
   const timestamp = now.toISOString();
   const stale = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   await env.DB.batch([
@@ -91,12 +100,12 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
           .bind(id)
           .first<PlannedShow>();
         if (!show) throw new Error('Planned show missing');
-        const text = reminderText(show, origin.origin);
+        const text = reminderText(show, origin);
         if (channel === 'email') {
           const result = await env.SHOW_EMAIL!.send({
             from: env.SHOW_EMAIL_FROM!,
             to: 'team@sentry.io',
-            subject: `Submit your demo: ${show.title}`,
+            subject: reminderSubject(show.title),
             text,
           });
           providerId = result.messageId;
@@ -104,7 +113,7 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
         } else {
           const submissionUrl = new URL(
             submissionPath(show.id, show.slug || eventSlug(show.title)),
-            origin.origin,
+            origin,
           ).href;
           const response = await fetch(env.SHOW_SLACK_WEBHOOK!, {
             method: 'POST',
@@ -146,7 +155,7 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
   }
 }
 
-function validSlackWebhook(value?: string) {
+export function validSlackWebhook(value?: string) {
   if (!value) return false;
   try {
     const url = new URL(value);

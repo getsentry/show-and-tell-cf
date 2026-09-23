@@ -19,7 +19,7 @@ beforeEach(async () => {
 });
 
 describe('events and submissions', () => {
-  it('hides playlists from every overview but preserves authenticated direct URLs and submissions', async () => {
+  it('shows hidden playlists only in admin overviews and preserves authenticated direct URLs and submissions', async () => {
     const admin = await userCookie('admin', true);
     const member = await userCookie('member', false);
     const created = await request('/api/events', admin.cookie, 'POST', {
@@ -31,10 +31,21 @@ describe('events and submissions', () => {
       event: {id: string; slug: string; hidden: boolean};
     }>();
     expect(event).toMatchObject({slug: 'october-special', hidden: true});
+    expect(
+      await (await request('/api/events', admin.cookie, 'GET')).json(),
+    ).toMatchObject({events: [{id: event.id, hidden: true}]});
+    expect(await (await request('/api/events', member.cookie, 'GET')).json()).toEqual({
+      events: [],
+    });
+    await request('/api/session/view-mode', admin.cookie, 'POST', {mode: 'member'});
+    expect(await (await request('/api/events', admin.cookie, 'GET')).json()).toEqual({
+      events: [],
+    });
+    await request('/api/session/view-mode', admin.cookie, 'POST', {mode: 'admin'});
+    expect(
+      await (await request('/api/events', admin.cookie, 'GET')).json(),
+    ).toMatchObject({events: [{id: event.id, hidden: true}]});
     for (const cookie of [admin.cookie, member.cookie]) {
-      expect(await (await request('/api/events', cookie, 'GET')).json()).toEqual({
-        events: [],
-      });
       expect((await request(`/api/events/${event.id}`, cookie, 'GET')).status).toBe(200);
       expect(
         (await request(`/api/events/${event.id}/playlist`, cookie, 'GET')).status,

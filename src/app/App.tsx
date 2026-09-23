@@ -22,6 +22,7 @@ import {Loader} from './components/Loader';
 import {SentrySymbol} from './components/SentrySymbol';
 import {ThemeToggle} from './components/ThemeToggle';
 import {PlaylistOrder} from './PlaylistOrder';
+import {ReminderList} from './ReminderList';
 import {PlaylistPage, SharePlaylist} from './PlaylistPage';
 import {VideoPanel} from './VideoPanel';
 
@@ -81,6 +82,7 @@ function ShowAndTell({
   const [eventsLoaded, setEventsLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(currentEventId);
   const [showCreate, setShowCreate] = useState(false);
+  const [showReminders, setShowReminders] = useState(false);
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
@@ -211,7 +213,7 @@ function ShowAndTell({
       setShowCreate(false);
       // Keep the new playlist usable even if refreshing the list fails.
       setEvents((current) => [
-        ...(!result.event.hidden ? [result.event] : []),
+        result.event,
         ...current.filter((entry) => entry.id !== result.event.id),
       ]);
       setEventsLoaded(true);
@@ -316,6 +318,19 @@ function ShowAndTell({
                 Show <span>&amp;</span> Tell
               </h1>
             </header>
+            {admin ? (
+              <div className="reminderToggle">
+                <button
+                  className="textAction"
+                  aria-expanded={showReminders}
+                  aria-controls="admin-reminders"
+                  onClick={() => setShowReminders((value) => !value)}
+                >
+                  {showReminders ? 'Close reminders' : 'View reminders'}
+                </button>
+                <div id="admin-reminders">{showReminders ? <ReminderList /> : null}</div>
+              </div>
+            ) : null}
             <section className="overviewSection" aria-label="Show & Tell playlists">
               <div className="overviewHeading">
                 <h2>The shows</h2>
@@ -367,11 +382,11 @@ function ShowAndTell({
                   </label>
                   <label className="checkboxLabel">
                     <input type="checkbox" name="hidden" disabled={creatingEvent} />
-                    Hide from overview
+                    Hide from member overview
                   </label>
                   <p className="formHint">
-                    Hidden playlists still work for anyone with the link and a Sentry
-                    login.
+                    Admins still see hidden playlists. Anyone with the link and a Sentry
+                    login can open them.
                   </p>
                   <button
                     className="primaryAction"
@@ -389,6 +404,9 @@ function ShowAndTell({
                       <h3>{event.title}</h3>
                     </div>
                     <div className="eventCardBody">
+                      {event.hidden ? (
+                        <span className="tag tag--hidden">Hidden</span>
+                      ) : null}
                       {event.description ? <p>{event.description}</p> : null}
                       <p className="eventCount">
                         {event.submissionCount}{' '}
@@ -455,6 +473,7 @@ function ShowAndTell({
                   onClick={() => selectEvent(event.id, true, event.slug)}
                 >
                   <strong>{event.title}</strong>
+                  {event.hidden ? <span className="tag tag--hidden">Hidden</span> : null}
                   <span>
                     {event.submissionCount}{' '}
                     {event.submissionCount === 1 ? 'submission' : 'submissions'}
@@ -507,8 +526,8 @@ function ShowAndTell({
                     }
                   >
                     {visibleSelection.event.hidden
-                      ? 'Show on overview'
-                      : 'Hide from overview'}
+                      ? 'Show on member overview'
+                      : 'Hide from member overview'}
                   </button>
                 ) : null}
                 {visibleSelection.event.cancelledAt ? (
@@ -516,7 +535,10 @@ function ShowAndTell({
                     This show was canceled. Its submissions and links are still available.
                   </p>
                 ) : visibleSelection.event.hidden ? (
-                  <p className="formHint">Hidden from overview. This link still works.</p>
+                  <p className="formHint">
+                    Hidden from the member overview. Admins can still see it, and this
+                    link still works.
+                  </p>
                 ) : null}
               </div>
             </header>
