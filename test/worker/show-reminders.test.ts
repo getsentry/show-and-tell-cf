@@ -124,6 +124,65 @@ it('reveals a due show and sends both channels once across concurrent and repeat
     ).first(),
   ).toEqual({is_hidden: 1});
 });
+it.each([null, '', '   ', 'Not/A_Timezone'])(
+  'sends email independently of invalid Slack timezone %s and records a definite Slack failure',
+  async (timezone) => {
+    await seed();
+    await env.DB.prepare("UPDATE show_and_tell_events SET timezone = ? WHERE id = 'show'")
+      .bind(timezone)
+      .run();
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await processShowReminders(config(), now);
+      await processShowReminders(config(), now);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0]).toEqual([
+        expect.objectContaining({
+          html: expect.stringContaining('October Show &amp; Tell'),
+          text: expect.stringContaining('/events/show/october-show'),
+        }),
+      ]);
+      expect(slack).not.toHaveBeenCalled();
+      expect(await statuses()).toEqual([
+        {channel: 'email', status: 'sent'},
+        {channel: 'slack', status: 'failed'},
+      ]);
+      expect(log).toHaveBeenCalledExactlyOnceWith('show_reminder_render_failed', {
+        eventId: 'show',
+        channel: 'slack',
+      });
+      // Correct and explicitly retry only the failed channel; never repeat email.
+      await env.DB.prepare(
+        "UPDATE show_and_tell_events SET timezone = 'America/Los_Angeles' WHERE id = 'show'",
+      ).run();
+      await env.DB.prepare(
+        "UPDATE show_reminders SET status = 'pending', retry_by = 'scheduler' WHERE event_id = 'show' AND channel = 'slack'",
+      ).run();
+      await processShowReminders(config(), now);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(slack).toHaveBeenCalledTimes(1);
+      expect(await statuses()).toEqual([
+        {channel: 'email', status: 'sent'},
+        {channel: 'slack', status: 'sent'},
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+  },
+);
+it('records email rendering errors as failed before any provider call and still sends Slack', async () => {
+  await seed();
+  await env.DB.prepare(
+    "UPDATE show_and_tell_events SET meeting_url = 'not-a-url' WHERE id = 'show'",
+  ).run();
+  await processShowReminders(config(), now);
+  expect(send).not.toHaveBeenCalled();
+  expect(slack).toHaveBeenCalledTimes(1);
+  expect(await statuses()).toEqual([
+    {channel: 'email', status: 'failed'},
+    {channel: 'slack', status: 'sent'},
+  ]);
+});
 it('does nothing when disabled and never contacts missing or unsafe delivery targets', async () => {
   await seed();
   await processShowReminders({...config(), SHOW_REMINDERS_ENABLED: 'false'}, now);

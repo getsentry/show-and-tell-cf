@@ -16,11 +16,12 @@ interface PlannedShow {
   title: string;
   slug: string;
   starts_at: string;
-  timezone: string;
+  timezone: string | null;
   meeting_url: string | null;
 }
 
 export function reminderText(show: PlannedShow, origin: string) {
+  if (!show.timezone?.trim()) throw new Error('Configure a valid show timezone.');
   const date = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'full',
     timeStyle: 'short',
@@ -92,6 +93,7 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
       // The DB trigger now prevents date changes/cancellation until delivery is reconciled.
       let status: 'sent' | 'failed' | 'uncertain' = 'uncertain';
       let providerId: string | null = null;
+      let deliveryStarted = false;
       try {
         const show = await env.DB.prepare(
           'SELECT * FROM show_and_tell_events WHERE id = ?',
@@ -99,20 +101,23 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
           .bind(id)
           .first<PlannedShow>();
         if (!show) throw new Error('Planned show missing');
-        const text = reminderText(show, origin);
         if (channel === 'email') {
+          const email = renderEmail(template, show, origin);
+          deliveryStarted = true;
           const result = await env.SHOW_EMAIL!.send({
             from: env.SHOW_EMAIL_FROM!,
             to: 'team@sentry.io',
-            ...renderEmail(template, show, origin),
+            ...email,
           });
           providerId = result.messageId;
           status = 'sent';
         } else {
+          const text = reminderText(show, origin);
           const submissionUrl = new URL(
             submissionPath(show.id, show.slug || eventSlug(show.title)),
             origin,
           ).href;
+          deliveryStarted = true;
           const response = await fetch(env.SHOW_SLACK_WEBHOOK!, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -141,8 +146,16 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
           else if (response.status >= 400 && response.status < 500) status = 'failed';
         }
       } catch {
-        // Never log provider errors: they can contain webhook secrets or message bodies.
-        console.error('show_reminder_delivery_uncertain', {eventId: id, channel});
+        // Rendering failures cannot have reached a provider and are safe to retry
+        // after correction. Once a provider call starts, preserve at-most-once safety.
+        status = deliveryStarted ? 'uncertain' : 'failed';
+        // Never log raw errors: they can contain webhook secrets or message bodies.
+        console.error(
+          deliveryStarted
+            ? 'show_reminder_delivery_uncertain'
+            : 'show_reminder_render_failed',
+          {eventId: id, channel},
+        );
       }
       await env.DB.prepare(`UPDATE show_reminders SET status = ?, completed_at = ?, provider_id = ?
         WHERE event_id = ? AND channel = ? AND status IN ('sending', 'uncertain')`)
