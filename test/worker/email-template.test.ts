@@ -108,7 +108,6 @@ it('previews unsaved copy without writes and delivery uses exactly the saved HTM
     ...defaultEmailTemplate,
     headline: 'Demo time!',
     subject: 'Your demo: {{title}}',
-    deadlineHoursBefore: 4,
   };
   const body = JSON.stringify({revision: 0, template, eventId: 'show'});
   const draft = await (await request('/preview', 'POST', body)).json<EmailPreview>();
@@ -182,4 +181,34 @@ it('rejects malformed templates and missing shows without mutations', async () =
   expect(
     await env.DB.prepare('SELECT count(*) AS count FROM show_email_templates').first(),
   ).toEqual({count: 0});
+});
+
+it('reads earlier saved drafts without retired deadline and closing fields', async () => {
+  const legacy = {
+    ...defaultEmailTemplate,
+    headline: 'Less slide deck. More show & tell.',
+    participation: 'Submit by {{deadline_times}}.',
+    deadlineHoursBefore: 3,
+    closing: 'TL;DR — again',
+    questions: 'Ask the hosts.',
+  };
+  await env.DB.prepare(
+    'INSERT INTO show_email_templates (revision,template_json,updated_by) VALUES (1,?,?)',
+  )
+    .bind(JSON.stringify(legacy), 'admin')
+    .run();
+  const saved = await (
+    await request()
+  ).json<{template: typeof defaultEmailTemplate; revision: number}>();
+  expect(saved).toEqual({
+    revision: 1,
+    template: {...defaultEmailTemplate, questions: 'Ask the hosts.'},
+  });
+  const response = await request(
+    '/preview',
+    'POST',
+    JSON.stringify({...saved, eventId: 'show'}),
+  );
+  expect(response.status).toBe(200);
+  expect((await response.json<EmailPreview>()).text).not.toContain('TL;DR');
 });

@@ -7,7 +7,6 @@ export const templateFields = {
   headline: {label: 'Headline', max: 200},
   intro: {label: 'Introduction', max: 2000},
   participation: {label: 'Submission instructions', max: 2000},
-  closing: {label: 'Closing / TL;DR', max: 1000},
   button: {label: 'Submission button', max: 80},
   help: {label: 'Newcomer welcome', max: 1000},
   questions: {label: 'Help and contacts', max: 1000},
@@ -19,13 +18,11 @@ export const templateFieldKeys = [
   'headline',
   'intro',
   'participation',
-  'closing',
   'button',
   'help',
   'questions',
 ] as const satisfies readonly TemplateField[];
 export type EmailTemplate = Record<TemplateField, string> & {
-  deadlineHoursBefore: number;
   demoMinutes: number;
 };
 export interface EmailTemplateResponse {
@@ -45,28 +42,19 @@ export interface EmailShow {
   meeting_url: string | null;
 }
 export const defaultEmailTemplate: EmailTemplate = {
-  subject: 'Time to show. Time to tell. — {{title}}',
-  preheader: 'Got five minutes of something good? Your next demo belongs here.',
-  headline: 'Less slide deck. More show & tell.',
-  intro:
-    'Hi all!\n\nIt’s that time again. The time to show and the time to tell. {{title}} is coming up:\n{{show_times}}',
+  subject: '{{title}} — submissions are open',
+  preheader: 'Upload your video for the next Show & Tell.',
+  headline: '{{title}}',
+  intro: 'Hi all!\n\nIt’s that time again. The time to show and the time to tell.',
   participation:
-    '👉 If you’re participating, submit your video by {{deadline_times}}.\n\nYep, it’s early on the west coast. Consider uploading the night before. Please keep demos below {{demo_minutes}} mins.',
-  closing:
-    'TL;DR — {{title}}: {{show_times}}. Bring something worth sharing. Upload your video below!',
+    'Upload your video using the link below. We’ll show the videos that are there when the meeting starts. Please keep demos below {{demo_minutes}} mins.',
   button: 'Upload your demo →',
   help: '👋 Psst, new to Sentry? Learn more about Show & Tell',
   questions:
     'Questions? Jump into Slack #discuss-show-n-tell. More questions? Ask @jr or @sergical — we’ll help!',
-  deadlineHoursBefore: 3,
   demoMinutes: 5,
 };
-export const templateTokens = [
-  'title',
-  'show_times',
-  'deadline_times',
-  'demo_minutes',
-] as const;
+export const templateTokens = ['title', 'show_times', 'demo_minutes'] as const;
 
 export function validateEmailTemplate(input: JsonInput): EmailTemplate {
   if (!isJsonObject(input)) throw new Error('Provide an email template.');
@@ -84,20 +72,12 @@ export function validateEmailTemplate(input: JsonInput): EmailTemplate {
       (field === 'subject' && /[\r\n]/.test(text))
     )
       throw new Error('Template contains unsupported control characters.');
-    const remainder = text.replace(
-      /\{\{(title|show_times|deadline_times|demo_minutes)\}\}/g,
-      '',
-    );
+    const remainder = text.replace(/\{\{(title|show_times|demo_minutes)\}\}/g, '');
     if (remainder.includes('{{') || remainder.includes('}}'))
-      throw new Error(
-        'Unknown placeholder. Use title, show_times, deadline_times or demo_minutes.',
-      );
+      throw new Error('Unknown placeholder. Use title, show_times or demo_minutes.');
     result[field] = text.trim();
   }
-  for (const [field, min, max] of [
-    ['deadlineHoursBefore', 0, 168],
-    ['demoMinutes', 1, 60],
-  ] as const) {
+  for (const [field, min, max] of [['demoMinutes', 1, 60]] as const) {
     const number = input[field];
     if (
       !isJsonNumber(number) ||
@@ -123,36 +103,35 @@ function escape(value: string) {
       ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[char]!,
   );
 }
-function times(date: Date) {
-  const day = (timeZone: string) =>
-    new Intl.DateTimeFormat('en-CA', {
+function showSchedule(date: Date) {
+  const dateIn = (timeZone: string) =>
+    new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
       year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
       timeZone,
     }).format(date);
-  const pacificDay = day('America/Los_Angeles');
-  return [
+  const day = dateIn('America/Los_Angeles');
+  const rows = [
     ['America/Los_Angeles', 'San Francisco'],
     ['America/New_York', 'New York'],
     ['Europe/Vienna', 'Vienna'],
-  ]
-    .map(([timeZone, city], index) => {
-      const options: Intl.DateTimeFormatOptions = {
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZoneName: 'short',
-        timeZone,
-      };
-      if (index === 0 || day(timeZone) !== pacificDay) {
-        options.weekday = 'short';
-        options.month = 'short';
-        options.day = 'numeric';
-        options.year = 'numeric';
-      }
-      return `${new Intl.DateTimeFormat('en-US', options).format(date)} (${city})`;
-    })
-    .join(' / ');
+  ].map(([timeZone, city]) => {
+    const time = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+      timeZone,
+      hour12: city !== 'Vienna',
+    }).format(date);
+    const localDay = dateIn(timeZone);
+    return {city, time, differentDay: localDay !== day ? localDay : null};
+  });
+  return {
+    text: `${day}\n${rows.map((row) => `${row.city}: ${row.time}${row.differentDay ? ` — ${row.differentDay}` : ''}`).join('\n')}`,
+    html: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0;background:#f4f1fa;border-radius:8px"><tr><td colspan="2" style="padding:20px 20px 12px"><p style="margin:0 0 6px;color:#65527b;font-size:12px">SHOW STARTS</p><p style="margin:0;font-weight:bold;font-size:20px">${escape(day)}</p></td></tr>${rows.map((row) => `<tr><td style="padding:8px 12px 12px 20px;color:#65527b">${escape(row.city)}</td><td style="padding:8px 20px 12px 0;font-weight:bold">${escape(row.time)}${row.differentDay ? `<br><span style="font-size:12px;font-weight:normal">${escape(row.differentDay)}</span>` : ''}</td></tr>`).join('')}</table>`,
+  };
 }
 
 /** One renderer for delivery and admin previews. Editable copy is plain text, never HTML. */
@@ -169,18 +148,16 @@ export function renderEmail(
     url.origin,
   ).href;
   const start = new Date(show.starts_at);
+  const schedule = showSchedule(start);
   const tokens = {
     title: show.title,
-    show_times: times(start),
-    deadline_times: times(
-      new Date(start.getTime() - template.deadlineHoursBefore * 3600000),
-    ),
+    show_times: schedule.text,
     demo_minutes: String(template.demoMinutes),
   };
   // Single pass: event titles cannot introduce additional template expressions.
   const replace = (text: string) =>
     text.replace(
-      /\{\{(title|show_times|deadline_times|demo_minutes)\}\}/g,
+      /\{\{(title|show_times|demo_minutes)\}\}/g,
       (_, token: keyof typeof tokens) => tokens[token],
     );
   const content = {...template};
@@ -201,7 +178,7 @@ export function renderEmail(
       meetingUrl = meeting.href;
   }
   const {help, questions} = content;
-  const text = `${content.headline}\n\n${content.intro}\n\n${content.participation}\n\n${content.button}\n${submissionUrl}\nSentry login required.\n\n${help}\n${learnUrl}\n\n${questions}${meetingUrl ? `\n\nJoin the show: ${meetingUrl}` : ''}\n\n${content.closing}\n${submissionUrl}`;
+  const text = `${content.headline}\n\n${content.intro}\n\nShow starts\n${schedule.text}\n\n${content.participation}\n\n${content.button}\n${submissionUrl}\nSentry login required.\n\n${help}\n${learnUrl}\n\n${questions}${meetingUrl ? `\n\nJoin the show: ${meetingUrl}` : ''}`;
   const paragraphs = (value: string) =>
     value
       .split(/\n\n+/)
@@ -215,12 +192,12 @@ export function renderEmail(
 <div style="display:none;max-height:0;overflow:hidden;mso-hide:all">${escape(content.preheader)}</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #ddd5eb;border-radius:16px;overflow:hidden">
-<tr><td style="background:#241537;color:#ffffff;padding:32px"><p style="margin:0 0 20px;letter-spacing:3px;font-size:12px;font-weight:bold;color:#c4b4ff">SENTRY / SHOW &amp; TELL</p><h1 style="margin:0;font-size:36px;line-height:1.15">${escape(content.headline)}</h1><p style="margin:20px 0 0;color:#e4dcf4">Small demos. Big “oh, nice.” energy.</p></td></tr>
+<tr><td style="background:#241537;color:#ffffff;padding:32px"><p style="margin:0 0 20px;letter-spacing:3px;font-size:12px;font-weight:bold;color:#c4b4ff">SENTRY / SHOW &amp; TELL</p><h1 style="margin:0;font-size:36px;line-height:1.15">${escape(content.headline)}</h1></td></tr>
 <tr><td style="padding:32px">${paragraphs(content.intro)}
-<div style="background:#f4f1fa;border-left:4px solid #7553ff;padding:20px;margin:24px 0">${paragraphs(content.participation)}</div>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #c9baec;border-radius:12px"><tr><td style="padding:24px;text-align:center"><p style="margin:0 0 8px;font-size:12px;letter-spacing:2px;color:#65527b">YOUR NEXT DEMO GOES HERE</p><h2 style="margin:0 0 16px;font-size:24px">${escape(show.title)}</h2>${button}<p style="margin:14px 0 0;font-size:12px;color:#65527b">Sentry login required · Under ${template.demoMinutes} minutes</p><p style="margin:10px 0 0;font-size:12px;overflow-wrap:anywhere;word-break:break-all"><a href="${escape(submissionUrl)}" style="color:#6341cc">${escape(submissionUrl)}</a></p></td></tr></table>
-<div style="margin-top:28px">${paragraphs(help)}<p><a href="${learnUrl}" style="color:#6341cc">The Show &amp; Tell field guide →</a></p>${paragraphs(questions)}${meetingUrl ? `<p><a href="${escape(meetingUrl)}" style="color:#6341cc">Join the show on Google Meet →</a></p>` : ''}</div>
-<div style="border-top:2px dashed #ddd5eb;margin-top:28px;padding-top:24px">${paragraphs(content.closing)}${button}</div>
-</td></tr></table><p style="font-size:12px;color:#65527b">Made for the things you can’t wait to show someone.</p></td></tr></table></body></html>`;
+${schedule.html}
+${paragraphs(content.participation)}
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #c9baec;border-radius:12px"><tr><td style="padding:24px;text-align:center"><p style="margin:0 0 8px;font-size:12px;letter-spacing:2px;color:#65527b">SUBMISSIONS</p><h2 style="margin:0 0 16px;font-size:24px">${escape(show.title)}</h2>${button}<p style="margin:14px 0 0;font-size:12px;color:#65527b">Sentry login required · Under ${template.demoMinutes} minutes</p><p style="margin:10px 0 0;font-size:12px;overflow-wrap:anywhere;word-break:break-all"><a href="${escape(submissionUrl)}" style="color:#6341cc">${escape(submissionUrl)}</a></p></td></tr></table>
+<div style="margin-top:28px"><p style="margin:0 0 18px;line-height:1.65"><a href="${learnUrl}" style="color:#6341cc">${escape(help)}</a></p>${paragraphs(questions)}${meetingUrl ? `<p><a href="${escape(meetingUrl)}" style="color:#6341cc">Join the show on Google Meet →</a></p>` : ''}</div>
+</td></tr></table></td></tr></table></body></html>`;
   return {subject, text, html};
 }

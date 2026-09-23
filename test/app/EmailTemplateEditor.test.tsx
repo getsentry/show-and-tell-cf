@@ -29,7 +29,10 @@ it('edits and previews a draft separately from saving, then refreshes reminders'
   render(
     <EmailTemplateEditor shows={[{id: 'show', title: 'October Show'}]} onSaved={saved} />,
   );
-  fireEvent.change(await screen.findByLabelText('Headline'), {
+  await screen.findByLabelText('Headline');
+  expect(screen.queryByLabelText(/Upload deadline/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/Closing/)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Headline'), {
     target: {value: 'Show your work'},
   });
   fireEvent.click(screen.getByRole('button', {name: 'Preview draft email'}));

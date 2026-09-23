@@ -83,7 +83,8 @@ export function EmailTemplateEditor({
       <p className="formHint">
         One shared template for future email attempts, not per-show copy. Saving does not
         send or retry anything. Already accepted or in-flight messages are not changed.
-        The deadline is guidance in the email, not an upload lock.
+        There is no submission deadline; the videos available when the show starts are
+        used.
       </p>
       <p className="formHint">
         Plain text only; the branded layout and submission links are generated safely.
@@ -121,25 +122,6 @@ export function EmailTemplateEditor({
                 />
               </label>
             ))}
-            <label>
-              Upload deadline: hours before show
-              <input
-                type="number"
-                min="0"
-                max="168"
-                value={data.template.deadlineHoursBefore}
-                onChange={(event) => {
-                  setData({
-                    ...data,
-                    template: {
-                      ...data.template,
-                      deadlineHoursBefore: Number(event.target.value),
-                    },
-                  });
-                  setPreview(null);
-                }}
-              />
-            </label>
             <label>
               Demo length: under this many minutes
               <input
