@@ -87,8 +87,9 @@ export function EmailTemplateEditor({
         used.
       </p>
       <p className="formHint">
-        Plain text only; the branded layout and submission links are generated safely.
-        Placeholders:{' '}
+        Plain text only; the branded layout and submission links are generated safely. In
+        Help and contacts, separate sections with a blank line. The first line of each
+        section becomes a bold label; following lines are regular text. Placeholders:{' '}
         {templateTokens.map((token) => (
           <code key={token}>{`{{${token}}} `}</code>
         ))}

@@ -15,8 +15,27 @@ import {
 // Read earlier draft revisions without bringing back the retired deadline copy.
 // Stored revisions remain immutable; the next explicit save persists the new shape.
 function upgradeSavedTemplate(input: JsonInput) {
-  if (!isJsonObject(input) || input.deadlineHoursBefore === undefined) return input;
+  if (!isJsonObject(input)) return input;
   const upgraded: JsonObject = Object.fromEntries(Object.entries(input));
+  // Refresh unchanged defaults, but preserve deliberately customized copy.
+  if (upgraded.subject === '{{title}} — submissions are open')
+    upgraded.subject = defaultEmailTemplate.subject;
+  if (
+    upgraded.intro ===
+    'Hi all!\n\nIt’s that time again. The time to show and the time to tell.'
+  )
+    upgraded.intro = defaultEmailTemplate.intro;
+  if (
+    upgraded.participation ===
+    'Upload your video using the link below. We’ll show the videos that are there when the meeting starts. Please keep demos below {{demo_minutes}} mins.'
+  )
+    upgraded.participation = defaultEmailTemplate.participation;
+  if (
+    upgraded.questions ===
+    'Questions? Jump into Slack #discuss-show-n-tell. More questions? Ask @jr or @sergical — we’ll help!'
+  )
+    upgraded.questions = defaultEmailTemplate.questions;
+  if (input.deadlineHoursBefore === undefined) return upgraded;
   for (const key of templateFieldKeys) {
     const text = upgraded[key];
     if (isJsonString(text) && text.includes('{{deadline_times}}'))

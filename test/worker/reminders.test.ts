@@ -89,7 +89,7 @@ it('returns exact previews, destinations, due time and status without sending or
     scheduledAt: '2099-10-01T16:00:00.000Z',
     timezone: 'America/Los_Angeles',
     destination: 'team@sentry.io',
-    subject: 'Special Show — submissions are open',
+    subject: '🎬 Special Show: submissions are open',
     blockedReasons: [],
   });
   expect(slack).toMatchObject({

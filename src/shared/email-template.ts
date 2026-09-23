@@ -42,16 +42,16 @@ export interface EmailShow {
   meeting_url: string | null;
 }
 export const defaultEmailTemplate: EmailTemplate = {
-  subject: '{{title}} — submissions are open',
+  subject: '🎬 {{title}}: submissions are open',
   preheader: 'Upload your video for the next Show & Tell.',
   headline: '{{title}}',
-  intro: 'Hi all!\n\nIt’s that time again. The time to show and the time to tell.',
+  intro: 'Hi all! 👋\n\nIt’s that time again. The time to show and the time to tell.',
   participation:
-    'Upload your video using the link below. We’ll show the videos that are there when the meeting starts. Please keep demos below {{demo_minutes}} mins.',
+    '👉 Upload your video using the link below. We’ll show the videos that are there when the meeting starts. Please keep demos below {{demo_minutes}} mins.',
   button: 'Upload your demo →',
   help: '👋 Psst, new to Sentry? Learn more about Show & Tell',
   questions:
-    'Questions? Jump into Slack #discuss-show-n-tell. More questions? Ask @jr or @sergical — we’ll help!',
+    '💬 Questions?\nJump into Slack #discuss-show-n-tell.\n\n🙋 Need a hand?\nAsk @jr or @sergical. We’ll help!',
   demoMinutes: 5,
 };
 export const templateTokens = ['title', 'show_times', 'demo_minutes'] as const;
@@ -129,8 +129,8 @@ function showSchedule(date: Date) {
     return {city, time, differentDay: localDay !== day ? localDay : null};
   });
   return {
-    text: `${day}\n${rows.map((row) => `${row.city}: ${row.time}${row.differentDay ? ` — ${row.differentDay}` : ''}`).join('\n')}`,
-    html: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0;background:#f4f1fa;border-radius:8px"><tr><td colspan="2" style="padding:20px 20px 12px"><p style="margin:0 0 6px;color:#65527b;font-size:12px">SHOW STARTS</p><p style="margin:0;font-weight:bold;font-size:20px">${escape(day)}</p></td></tr>${rows.map((row) => `<tr><td style="padding:8px 12px 12px 20px;color:#65527b">${escape(row.city)}</td><td style="padding:8px 20px 12px 0;font-weight:bold">${escape(row.time)}${row.differentDay ? `<br><span style="font-size:12px;font-weight:normal">${escape(row.differentDay)}</span>` : ''}</td></tr>`).join('')}</table>`,
+    text: `${day}\n${rows.map((row) => `${row.city}: ${row.time}${row.differentDay ? ` (${row.differentDay})` : ''}`).join('\n')}`,
+    html: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0;background:#f4f1fa;border-radius:8px"><tr><td colspan="2" style="padding:20px 20px 12px"><p style="margin:0 0 6px;color:#65527b;font-size:12px">🗓️ SHOW STARTS</p><p style="margin:0;font-weight:bold;font-size:20px">${escape(day)}</p></td></tr>${rows.map((row) => `<tr><td style="padding:8px 12px 12px 20px;color:#65527b">${escape(row.city)}</td><td style="padding:8px 20px 12px 0;font-weight:bold">${escape(row.time)}${row.differentDay ? `<br><span style="font-size:12px;font-weight:normal">${escape(row.differentDay)}</span>` : ''}</td></tr>`).join('')}</table>`,
   };
 }
 
@@ -178,7 +178,7 @@ export function renderEmail(
       meetingUrl = meeting.href;
   }
   const {help, questions} = content;
-  const text = `${content.headline}\n\n${content.intro}\n\nShow starts\n${schedule.text}\n\n${content.participation}\n\n${content.button}\n${submissionUrl}\nSentry login required.\n\n${help}\n${learnUrl}\n\n${questions}${meetingUrl ? `\n\nJoin the show: ${meetingUrl}` : ''}`;
+  const text = `${content.headline}\n\n${content.intro}\n\n🗓️ Show starts\n${schedule.text}\n\n${content.participation}\n\n${content.button}\n${submissionUrl}\nSentry login required.\n\nInfo & help\n\n${help}\n${learnUrl}\n\n${questions}${meetingUrl ? `\n\n📹 Join the show: ${meetingUrl}` : ''}`;
   const paragraphs = (value: string) =>
     value
       .split(/\n\n+/)
@@ -196,8 +196,16 @@ export function renderEmail(
 <tr><td style="padding:32px">${paragraphs(content.intro)}
 ${schedule.html}
 ${paragraphs(content.participation)}
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #c9baec;border-radius:12px"><tr><td style="padding:24px;text-align:center"><p style="margin:0 0 8px;font-size:12px;letter-spacing:2px;color:#65527b">SUBMISSIONS</p><h2 style="margin:0 0 16px;font-size:24px">${escape(show.title)}</h2>${button}<p style="margin:14px 0 0;font-size:12px;color:#65527b">Sentry login required · Under ${template.demoMinutes} minutes</p><p style="margin:10px 0 0;font-size:12px;overflow-wrap:anywhere;word-break:break-all"><a href="${escape(submissionUrl)}" style="color:#6341cc">${escape(submissionUrl)}</a></p></td></tr></table>
-<div style="margin-top:28px"><p style="margin:0 0 18px;line-height:1.65"><a href="${learnUrl}" style="color:#6341cc">${escape(help)}</a></p>${paragraphs(questions)}${meetingUrl ? `<p><a href="${escape(meetingUrl)}" style="color:#6341cc">Join the show on Google Meet →</a></p>` : ''}</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #c9baec;border-radius:12px"><tr><td style="padding:24px;text-align:center"><p style="margin:0 0 8px;font-size:12px;letter-spacing:2px;color:#65527b">🎬 SUBMISSIONS</p><h2 style="margin:0 0 16px;font-size:24px">${escape(show.title)}</h2>${button}<p style="margin:14px 0 0;font-size:12px;color:#65527b">Sentry login required · Under ${template.demoMinutes} minutes</p><p style="margin:10px 0 0;font-size:12px;overflow-wrap:anywhere;word-break:break-all"><a href="${escape(submissionUrl)}" style="color:#6341cc">${escape(submissionUrl)}</a></p></td></tr></table>
+<div style="margin-top:28px;border-top:1px solid #ddd5eb;padding-top:24px"><h2 style="margin:0 0 18px;font-size:18px">Info &amp; help</h2><p style="margin:0 0 20px;line-height:1.65"><a href="${learnUrl}" style="color:#6341cc">${escape(help)}</a></p>${questions
+    .split(/\n\n+/)
+    .map((part) => {
+      const [label, ...lines] = part.split('\n');
+      return `<p style="margin:0 0 20px;line-height:1.65"><strong>${escape(label)}</strong>${lines.length ? `<br>${lines.map(escape).join('<br>')}` : ''}</p>`;
+    })
+    .join(
+      '',
+    )}${meetingUrl ? `<p style="margin:0;line-height:1.65"><a href="${escape(meetingUrl)}" style="color:#6341cc">📹 Join the show on Google Meet →</a></p>` : ''}</div>
 </td></tr></table></td></tr></table></body></html>`;
   return {subject, text, html};
 }

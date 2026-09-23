@@ -212,3 +212,23 @@ it('reads earlier saved drafts without retired deadline and closing fields', asy
   expect(response.status).toBe(200);
   expect((await response.json<EmailPreview>()).text).not.toContain('TL;DR');
 });
+
+it('refreshes unchanged footer defaults while preserving custom template copy', async () => {
+  const earlier = {
+    ...defaultEmailTemplate,
+    subject: '{{title}} — submissions are open',
+    questions:
+      'Questions? Jump into Slack #discuss-show-n-tell. More questions? Ask @jr or @sergical — we’ll help!',
+    headline: 'Our custom headline',
+  };
+  await env.DB.prepare(
+    'INSERT INTO show_email_templates (revision,template_json,updated_by) VALUES (1,?,?)',
+  )
+    .bind(JSON.stringify(earlier), 'admin')
+    .run();
+  const saved = await (await request()).json<{template: typeof defaultEmailTemplate}>();
+  expect(saved.template).toEqual({
+    ...defaultEmailTemplate,
+    headline: 'Our custom headline',
+  });
+});

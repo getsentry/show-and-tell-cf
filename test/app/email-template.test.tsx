@@ -27,6 +27,16 @@ it('renders branded HTML, a real submission card, help links and plain-text fall
   expect(email.text).toContain('@jr or @sergical');
   expect(email.text).toContain('https://meet.google.com/abc-defg-hij');
   expect(email.text).not.toContain('{{');
+  expect(email.subject).toBe('🎬 October Show & Tell: submissions are open');
+  expect(email.html).toContain('<strong>💬 Questions?</strong><br>');
+  expect(email.html).toContain('<strong>🙋 Need a hand?</strong><br>');
+  expect(email.html).toContain('Info &amp; help</h2>');
+  for (const emoji of ['👋', '👉', '🗓️']) {
+    expect(email.html).toContain(emoji);
+    expect(email.text).toContain(emoji);
+  }
+  for (const output of [email.subject, email.text, email.html])
+    expect(output).not.toContain('—');
   expect(email.html).toContain(
     '<h1 style="margin:0;font-size:36px;line-height:1.15">October Show &amp; Tell</h1>',
   );
@@ -118,6 +128,6 @@ it('shows the local date when a city crosses midnight', () => {
     'https://example.test',
   );
   expect(email.text).toContain('Thursday, October 8, 2026');
-  expect(email.text).toMatch(/Vienna: 03:00 (GMT\+2|CEST) — Friday, October 9, 2026/);
+  expect(email.text).toMatch(/Vienna: 03:00 (GMT\+2|CEST) \(Friday, October 9, 2026\)/);
   expect(email.html).toContain('Friday, October 9, 2026');
 });
