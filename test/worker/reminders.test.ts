@@ -160,3 +160,46 @@ it('identifies canceled plans and leaves delivery records untouched', async () =
   ).toBe(true);
   expect(body.reminders.every((r) => r.status === 'pending')).toBe(true);
 });
+
+it.each([null, '', 'not-a-date'])(
+  'flags a missing or invalid start (%s) without inventing an epoch preview',
+  async (startsAt) => {
+    const admin = await user('admin', true);
+    await seed(admin.id);
+    await env.DB.prepare(
+      "UPDATE show_and_tell_events SET starts_at=? WHERE id='planned-show'",
+    )
+      .bind(startsAt)
+      .run();
+    const response = await get(admin.cookie);
+    expect(response.status).toBe(200);
+    const {reminders} = await response.json<ShowRemindersResponse>();
+    expect(reminders[0].blockedReasons).toContain('Set a valid show start date.');
+    expect(reminders[0].blockedReasons).not.toContain('This show has already started.');
+    expect(reminders[0]).toMatchObject({
+      message: null,
+      html: null,
+      subject: null,
+      status: 'pending',
+    });
+    expect(
+      (await env.DB.prepare('SELECT status FROM show_reminders').all()).results,
+    ).toEqual([{status: 'pending'}]);
+  },
+);
+it('distinguishes a real past start from a future start', async () => {
+  const admin = await user('admin', true);
+  await seed(admin.id, 'past');
+  await seed(admin.id, 'future');
+  await env.DB.prepare(
+    "UPDATE show_and_tell_events SET starts_at='2000-01-01T12:00:00.000Z' WHERE id='past'",
+  ).run();
+  const {reminders} = await (await get(admin.cookie)).json<ShowRemindersResponse>();
+  expect(reminders.find((row) => row.eventId === 'past')!.blockedReasons).toContain(
+    'This show has already started.',
+  );
+  expect(reminders.find((row) => row.eventId === 'future')!.blockedReasons).not.toContain(
+    'This show has already started.',
+  );
+  expect(reminders.every((row) => row.message !== null)).toBe(true);
+});

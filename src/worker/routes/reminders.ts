@@ -13,7 +13,7 @@ interface ReminderRow {
   id: string;
   title: string;
   slug: string;
-  starts_at: string;
+  starts_at: string | null;
   reminder_at: string;
   timezone: string;
   meeting_url: string | null;
@@ -53,8 +53,11 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
   const reminders = results.slice(0, 50).map((row): ShowReminder => {
     const blockedReasons: string[] = [];
     if (!enabled) blockedReasons.push('Automatic reminders are disabled.');
+    const startsAt = row.starts_at ? Date.parse(row.starts_at) : NaN;
+    const hasStart = Number.isFinite(startsAt);
+    if (!hasStart) blockedReasons.push('Set a valid show start date.');
     if (row.cancelled_at) blockedReasons.push('This show was canceled.');
-    else if (row.starts_at <= timestamp)
+    else if (hasStart && startsAt <= now.getTime())
       blockedReasons.push('This show has already started.');
     else if (row.reminder_at < stale && row.status === 'pending')
       blockedReasons.push('The 24-hour catch-up window has expired.');
@@ -64,9 +67,9 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
     let message: string | null = null;
     let subject: string | null = null;
     let html: string | null = null;
-    if (origin) {
+    if (origin && hasStart && row.starts_at !== null) {
       try {
-        const email = renderEmail(template, row, origin);
+        const email = renderEmail(template, {...row, starts_at: row.starts_at}, origin);
         message = email.text;
         subject = email.subject;
         html = email.html;
