@@ -6,6 +6,7 @@ import {requireRole} from '../middleware/user';
 import {readEmailTemplate} from '../services/email-template';
 import {
   renderEmail,
+  InvalidMeetingUrlError,
   validateEmailTemplate,
   type EmailShow,
 } from '../../shared/email-template';
@@ -121,9 +122,16 @@ emailTemplateRoutes.on(
     let email;
     try {
       email = renderEmail(template, show, reminderOrigin(c.env.APP_ORIGIN));
-    } catch {
+    } catch (error) {
       return c.json(
-        {error: {message: 'Check the show date and HTTPS APP_ORIGIN before previewing.'}},
+        {
+          error: {
+            message:
+              error instanceof InvalidMeetingUrlError
+                ? error.message
+                : 'Check the show date and HTTPS APP_ORIGIN before previewing.',
+          },
+        },
         400,
       );
     }

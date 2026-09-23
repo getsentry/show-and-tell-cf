@@ -185,3 +185,42 @@ it('preserves uncertain acceptance without leaking provider errors or resending'
   await request(body);
   expect(send).toHaveBeenCalledTimes(1);
 });
+
+it('identifies malformed meeting URLs in previews, test sends and reminder blockers without exposing the value', async () => {
+  await env.DB.prepare(
+    "UPDATE show_and_tell_events SET meeting_url='invalid-PRIVATE-MEETING' WHERE id='show'",
+  ).run();
+  const test = await request();
+  expect(test.status).toBe(400);
+  const diagnostic = 'The show meeting URL is invalid. Use a valid Google Meet URL.';
+  expect(await test.json()).toEqual({error: {message: diagnostic}});
+  const preview = await app.request(
+    `${origin}/api/admin/email-template/preview`,
+    {
+      method: 'POST',
+      headers: {Cookie: cookie, Origin: origin, 'Content-Type': 'application/json'},
+      body: JSON.stringify({eventId: 'show', template}),
+    },
+    env,
+  );
+  expect(preview.status).toBe(400);
+  expect(await preview.json()).toEqual({error: {message: diagnostic}});
+  const list = await app.request(
+    `${origin}/api/admin/reminders`,
+    {headers: {Cookie: cookie}},
+    env,
+  );
+  const body = await list.json<{
+    reminders: {blockedReasons: string[]; message: string | null}[];
+  }>();
+  expect(body.reminders[0].blockedReasons).toContain(diagnostic);
+  expect(body.reminders[0].blockedReasons).not.toContain(
+    'The show date or timezone needs correction.',
+  );
+  expect(body.reminders[0].message).toBeNull();
+  expect(JSON.stringify(body)).not.toContain('PRIVATE-MEETING');
+  expect(send).not.toHaveBeenCalled();
+  expect(
+    await env.DB.prepare('SELECT COUNT(*) AS count FROM show_email_tests').first(),
+  ).toEqual({count: 0});
+});

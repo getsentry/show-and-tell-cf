@@ -134,6 +134,13 @@ function showSchedule(date: Date) {
   };
 }
 
+// Fixed diagnostic only: never expose the stored URL in an error response.
+export class InvalidMeetingUrlError extends Error {
+  constructor() {
+    super('The show meeting URL is invalid. Use a valid Google Meet URL.');
+  }
+}
+
 /** One renderer for delivery and admin previews. Editable copy is plain text, never HTML. */
 export function renderEmail(
   template: EmailTemplate,
@@ -168,6 +175,7 @@ export function renderEmail(
     .slice(0, 250);
   let meetingUrl: string | null = null;
   if (show.meeting_url) {
+    if (!URL.canParse(show.meeting_url)) throw new InvalidMeetingUrlError();
     const meeting = new URL(show.meeting_url);
     if (
       meeting.protocol === 'https:' &&

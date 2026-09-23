@@ -5,7 +5,7 @@ import {eventSlug, submissionPath} from '../../shared/playlist';
 import type {ShowReminder, ShowRemindersResponse} from '../../shared/reminders';
 import {reminderOrigin} from '../services/show-reminders';
 
-import {renderEmail} from '../../shared/email-template';
+import {renderEmail, InvalidMeetingUrlError} from '../../shared/email-template';
 import {readEmailTemplate} from '../services/email-template';
 
 export const reminderRoutes = new Hono<WorkerEnv>();
@@ -73,8 +73,12 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
         message = email.text;
         subject = email.subject;
         html = email.html;
-      } catch {
-        blockedReasons.push('The show date or timezone needs correction.');
+      } catch (error) {
+        blockedReasons.push(
+          error instanceof InvalidMeetingUrlError
+            ? error.message
+            : 'The show date or timezone needs correction.',
+        );
       }
     }
     return {
