@@ -66,6 +66,39 @@ describe('events and submissions', () => {
     ).toMatchObject({events: [{id: event.id, hidden: false}]});
     expect((await request(`/api/events/${event.id}`, '', 'GET')).status).toBe(401);
   });
+  it('exposes cancellation on direct links without allowing a cancelled show to be revealed', async () => {
+    const admin = await userCookie('admin', true);
+    const member = await userCookie('member', false);
+    const eventId = await createEvent(admin.cookie);
+    const cancelledAt = '2030-09-01T00:00:00Z';
+    await env.DB.prepare(
+      'UPDATE show_and_tell_events SET plan_key = ?, plan_updated_by = ?, cancelled_at = ?, is_hidden = 1 WHERE id = ?',
+    )
+      .bind('cancelled-show', admin.id, cancelledAt, eventId)
+      .run();
+    for (const cookie of [admin.cookie, member.cookie]) {
+      expect(
+        await (await request(`/api/events/${eventId}`, cookie, 'GET')).json(),
+      ).toMatchObject({event: {id: eventId, hidden: true, cancelledAt}});
+      expect(await (await request('/api/events', cookie, 'GET')).json()).toEqual({
+        events: [],
+      });
+    }
+    expect(
+      (
+        await request(`/api/events/${eventId}/visibility`, admin.cookie, 'POST', {
+          hidden: false,
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      await env.DB.prepare(
+        'SELECT is_hidden, cancelled_at FROM show_and_tell_events WHERE id = ?',
+      )
+        .bind(eventId)
+        .first(),
+    ).toEqual({is_hidden: 1, cancelled_at: cancelledAt});
+  });
   it('rejects malformed visibility and slugs', async () => {
     const admin = await userCookie('admin', true);
     expect(

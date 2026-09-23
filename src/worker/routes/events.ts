@@ -27,7 +27,7 @@ eventRoutes.onError((error, c) => {
 
 eventRoutes.get('/', async (c) => {
   const result = await c.env.DB.prepare(
-    `SELECT e.id, e.title, e.description, e.created_at, e.slug, e.is_hidden, e.starts_at, e.timezone, e.meeting_url,
+    `SELECT e.id, e.title, e.description, e.created_at, e.slug, e.is_hidden, e.starts_at, e.timezone, e.meeting_url, e.cancelled_at,
       COUNT(s.id) submission_count
      FROM show_and_tell_events e
      LEFT JOIN submissions s ON s.event_id = e.id AND s.deleted_at IS NULL
@@ -153,6 +153,7 @@ eventRoutes.post(
 );
 
 interface EventRow {
+  cancelled_at: string | null;
   slug: string;
   is_hidden: number;
   starts_at: string | null;
@@ -179,7 +180,7 @@ interface SubmissionRow {
 async function getEvent(db: D1Database, id: string, role: string, userId: string) {
   const row = await db
     .prepare(
-      `SELECT e.id, e.title, e.description, e.created_at, e.slug, e.is_hidden, e.starts_at, e.timezone, e.meeting_url,
+      `SELECT e.id, e.title, e.description, e.created_at, e.slug, e.is_hidden, e.starts_at, e.timezone, e.meeting_url, e.cancelled_at,
       COUNT(s.id) submission_count
      FROM show_and_tell_events e LEFT JOIN submissions s
        ON s.event_id = e.id AND s.deleted_at IS NULL
@@ -213,6 +214,7 @@ function toEvent(row: EventRow): ShowAndTellEvent {
     submissionCount: row.submission_count,
     slug: row.slug || eventSlug(row.title),
     hidden: row.is_hidden === 1,
+    cancelledAt: row.cancelled_at,
     startsAt: row.starts_at,
     timezone: row.timezone,
     meetingUrl: row.meeting_url,

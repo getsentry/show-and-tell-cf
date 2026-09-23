@@ -6,6 +6,7 @@ export interface ShowAndTellEvent {
   submissionCount: number;
   slug?: string;
   hidden?: boolean;
+  cancelledAt?: string | null;
   startsAt?: string | null;
   timezone?: string | null;
   meetingUrl?: string | null;

@@ -499,7 +499,7 @@ function ShowAndTell({
                   eventId={visibleSelection.event.id}
                   slug={visibleSelection.event.slug}
                 />
-                {admin ? (
+                {admin && !visibleSelection.event.cancelledAt ? (
                   <button
                     disabled={changingVisibility}
                     onClick={() =>
@@ -511,7 +511,11 @@ function ShowAndTell({
                       : 'Hide from overview'}
                   </button>
                 ) : null}
-                {visibleSelection.event.hidden ? (
+                {visibleSelection.event.cancelledAt ? (
+                  <p className="formHint" role="status">
+                    This show was canceled. Its submissions and links are still available.
+                  </p>
+                ) : visibleSelection.event.hidden ? (
                   <p className="formHint">Hidden from overview. This link still works.</p>
                 ) : null}
               </div>
