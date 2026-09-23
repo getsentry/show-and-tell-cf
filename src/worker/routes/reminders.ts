@@ -1,14 +1,86 @@
 import {Hono} from 'hono';
+import {bodyLimit} from 'hono/body-limit';
+import {isJsonObject, isJsonString} from '../../shared/json';
+import {sendTestEmail} from '../services/test-email';
 import type {WorkerEnv} from '../index';
 import {requireRole} from '../middleware/user';
 import {eventSlug, submissionPath} from '../../shared/playlist';
 import type {ShowReminder, ShowRemindersResponse} from '../../shared/reminders';
 import {reminderOrigin} from '../services/show-reminders';
 
-import {renderEmail, InvalidMeetingUrlError} from '../../shared/email-template';
-import {readEmailTemplate} from '../services/email-template';
+import {
+  renderEmail,
+  InvalidMeetingUrlError,
+  type EmailShow,
+} from '../../shared/email-template';
 
 export const reminderRoutes = new Hono<WorkerEnv>();
+reminderRoutes.use('*', requireRole('admin'), async (c, next) => {
+  c.header('Cache-Control', 'private, no-store');
+  await next();
+});
+
+reminderRoutes.post('/test-email', bodyLimit({maxSize: 1024}), async (c) => {
+  const input: unknown = await c.req.json().catch(() => null);
+  if (
+    !isJsonObject(input) ||
+    !isJsonString(input.eventId) ||
+    !isJsonString(input.requestId) ||
+    !/^[a-f0-9-]{36}$/.test(input.requestId) ||
+    Object.keys(input).some((key) => !['eventId', 'requestId'].includes(key))
+  )
+    return c.json(
+      {
+        error: {
+          message:
+            'Provide a show and test request ID only. Recipient overrides are not supported.',
+        },
+      },
+      400,
+    );
+
+  const user = c.get('user');
+  if (
+    !/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@sentry\.io$/i.test(user.email) ||
+    user.email.toLowerCase() === 'team@sentry.io'
+  )
+    return c.json(
+      {error: {message: 'Use your individual Sentry account for test mail.'}},
+      403,
+    );
+  if (!c.env.SHOW_EMAIL || !c.env.SHOW_EMAIL_FROM)
+    return c.json({error: {message: 'Email binding or sender is not configured.'}}, 503);
+
+  const show = await c.env.DB.prepare(
+    'SELECT id,title,slug,starts_at,meeting_url FROM show_and_tell_events WHERE id=? AND starts_at IS NOT NULL',
+  )
+    .bind(input.eventId)
+    .first<EmailShow>();
+  if (!show) return c.json({error: {message: 'Planned show not found.'}}, 404);
+  let email;
+  try {
+    email = renderEmail(show, reminderOrigin(c.env.APP_ORIGIN));
+  } catch (error) {
+    return c.json(
+      {
+        error: {
+          message:
+            error instanceof InvalidMeetingUrlError
+              ? error.message
+              : 'Check the show date and HTTPS APP_ORIGIN.',
+        },
+      },
+      400,
+    );
+  }
+  const result = await sendTestEmail(c.env, user, input.requestId, email);
+  if (result.status === 'rate_limited') {
+    c.header('Retry-After', '60');
+    return c.json({error: {message: 'Wait one minute between test emails.'}}, 429);
+  }
+  return c.json(result);
+});
+
 interface ReminderRow {
   id: string;
   title: string;
@@ -24,8 +96,7 @@ interface ReminderRow {
   completed_at: string | null;
 }
 
-reminderRoutes.get('/', requireRole('admin'), async (c) => {
-  c.header('Cache-Control', 'private, no-store');
+reminderRoutes.get('/', async (c) => {
   const offsetParam = c.req.query('offset') ?? '0';
   if (!/^\d{1,6}$/.test(offsetParam))
     return c.json({error: {message: 'Use a non-negative offset up to 999999'}}, 400);
@@ -49,7 +120,6 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
   } catch {
     /* Show configuration blocker without leaking the value. */
   }
-  const {template} = await readEmailTemplate(c.env.DB);
   const reminders = results.slice(0, 50).map((row): ShowReminder => {
     const blockedReasons: string[] = [];
     if (!enabled) blockedReasons.push('Automatic reminders are disabled.');
@@ -69,7 +139,7 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
     let html: string | null = null;
     if (origin && hasStart && row.starts_at !== null) {
       try {
-        const email = renderEmail(template, {...row, starts_at: row.starts_at}, origin);
+        const email = renderEmail({...row, starts_at: row.starts_at}, origin);
         message = email.text;
         subject = email.subject;
         html = email.html;

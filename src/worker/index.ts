@@ -11,7 +11,6 @@ import {eventRoutes} from './routes/events';
 import {playlistRoutes} from './routes/playlists';
 import {sessionRoutes} from './routes/session';
 import {reminderRoutes} from './routes/reminders';
-import {emailTemplateRoutes} from './routes/email-template';
 import {submissionVideoRoutes, videosRoutes} from './routes/videos';
 import {reapExpiredMultipartVideoUploads} from './services/videos';
 import {
@@ -49,7 +48,6 @@ app.use('/api/*', authenticateRequest<WorkerEnv>());
 app.use('/api/*', protectMutationOrigin<WorkerEnv>());
 app.route('/api/auth', authenticatedAuthRoutes);
 app.route('/api/session', sessionRoutes);
-app.route('/api/admin/email-template', emailTemplateRoutes);
 app.route('/api/admin/reminders', reminderRoutes);
 app.route('/api/events', playlistRoutes);
 app.route('/api/events', eventRoutes);

@@ -49,6 +49,38 @@ it('shows when, where, status, disabled state and message preview', async () => 
   ).toBeVisible();
   expect(within(card).getByText('Submit your demo: October Show')).toBeVisible();
 });
+it('sends a personal test from the reminder card and reuses the attempt after a network error', async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({
+        ...payload,
+        reminders: [
+          {
+            ...payload.reminders[0],
+            html: '<html><head></head><body>Preview</body></html>',
+          },
+        ],
+      }),
+    )
+    .mockRejectedValueOnce(new Error('Connection lost'))
+    .mockResolvedValueOnce(Response.json({status: 'sent', recipient: 'admin@sentry.io'}));
+  vi.stubGlobal('fetch', fetcher);
+  render(<ReminderList />);
+  fireEvent.click(await screen.findByRole('button', {name: 'Send test to me'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Connection lost');
+  fireEvent.click(screen.getByRole('button', {name: 'Check test attempt'}));
+  await screen.findByText('Test accepted for admin@sentry.io. Check your inbox.');
+  expect(fetcher.mock.calls[1][0]).toBe('/api/admin/reminders/test-email');
+  const first = JSON.parse(fetcher.mock.calls[1][1].body);
+  expect(first).toEqual({eventId: 'show', requestId: expect.any(String)});
+  expect(fetcher.mock.calls[2][1].body).toBe(fetcher.mock.calls[1][1].body);
+  expect(screen.getByRole('button', {name: 'Check test attempt'})).toBeDisabled();
+  expect(
+    screen.queryByRole('button', {name: 'Edit email template'}),
+  ).not.toBeInTheDocument();
+});
+
 it('handles errors with refresh and paginates', async () => {
   const fetcher = vi
     .fn()

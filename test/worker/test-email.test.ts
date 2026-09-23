@@ -4,20 +4,18 @@ import {app} from '../../src/worker';
 import {SESSION_COOKIE_NAME} from '../../src/worker/middleware/auth';
 import {createSession} from '../../src/worker/services/sessions';
 import {synchronizeGoogleUser} from '../../src/worker/services/users';
-import {defaultEmailTemplate, renderEmail} from '../../src/shared/email-template';
+import {renderEmail} from '../../src/shared/email-template';
 
 const origin = 'https://showntell.test';
 const send = vi.fn(async () => ({messageId: 'test-only'}));
 let cookie: string;
 let adminId: string;
-const template = {...defaultEmailTemplate, headline: 'Unsaved draft'};
-const payload = () => ({eventId: 'show', template, requestId: crypto.randomUUID()});
+const payload = () => ({eventId: 'show', requestId: crypto.randomUUID()});
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare('DELETE FROM show_email_tests'),
     env.DB.prepare('DELETE FROM submissions'),
     env.DB.prepare('DELETE FROM show_and_tell_events'),
-    env.DB.prepare('DELETE FROM show_email_templates'),
     env.DB.prepare('DELETE FROM user_sessions'),
     env.DB.prepare('DELETE FROM users'),
   ]);
@@ -43,7 +41,7 @@ function request(
   configured = true,
 ) {
   return app.request(
-    `${origin}/api/admin/email-template/test`,
+    `${origin}/api/admin/reminders/test-email`,
     {
       method: 'POST',
       headers: {
@@ -61,12 +59,11 @@ function request(
     },
   );
 }
-it('sends the unsaved rendered draft only to the authenticated admin, even with scheduling disabled', async () => {
+it('sends the static email only to the authenticated admin, even with scheduling disabled', async () => {
   const response = await request();
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({status: 'sent', recipient: 'tester@sentry.io'});
   const email = renderEmail(
-    template,
     {
       id: 'show',
       title: 'October Show',
@@ -82,9 +79,6 @@ it('sends the unsaved rendered draft only to the authenticated admin, even with 
     from: 'sender@example.test',
     to: 'tester@sentry.io',
   });
-  expect(
-    await env.DB.prepare('SELECT COUNT(*) AS count FROM show_email_templates').first(),
-  ).toEqual({count: 0});
   expect(
     (await env.DB.prepare('SELECT channel,status,attempted_at FROM show_reminders').all())
       .results,
@@ -112,12 +106,13 @@ it('denies anonymous users, members, member view and cross-origin sends', async 
   expect((await request()).status).toBe(403);
   expect(send).not.toHaveBeenCalled();
 });
-it('rejects address overrides, bad templates, unknown shows and oversized requests before claiming', async () => {
+it('rejects address overrides, unexpected fields, unknown shows and oversized requests before claiming', async () => {
   for (const extra of [
     {to: 'team@sentry.io'},
     {recipient: 'other@sentry.io'},
     {bcc: 'other@example.com'},
     {from: 'fake@sentry.io'},
+    {template: {headline: 'Override'}},
   ]) {
     expect((await request(JSON.stringify({...payload(), ...extra}))).status).toBe(400);
   }
@@ -125,13 +120,6 @@ it('rejects address overrides, bad templates, unknown shows and oversized reques
   expect((await request(JSON.stringify({...payload(), requestId: 'bad'}))).status).toBe(
     400,
   );
-  expect(
-    (
-      await request(
-        JSON.stringify({...payload(), template: {...template, intro: '{{unknown}}'}}),
-      )
-    ).status,
-  ).toBe(400);
   expect((await request(JSON.stringify({...payload(), eventId: 'missing'}))).status).toBe(
     404,
   );
@@ -194,17 +182,6 @@ it('identifies malformed meeting URLs in previews, test sends and reminder block
   expect(test.status).toBe(400);
   const diagnostic = 'The show meeting URL is invalid. Use a valid Google Meet URL.';
   expect(await test.json()).toEqual({error: {message: diagnostic}});
-  const preview = await app.request(
-    `${origin}/api/admin/email-template/preview`,
-    {
-      method: 'POST',
-      headers: {Cookie: cookie, Origin: origin, 'Content-Type': 'application/json'},
-      body: JSON.stringify({eventId: 'show', template}),
-    },
-    env,
-  );
-  expect(preview.status).toBe(400);
-  expect(await preview.json()).toEqual({error: {message: diagnostic}});
   const list = await app.request(
     `${origin}/api/admin/reminders`,
     {headers: {Cookie: cookie}},

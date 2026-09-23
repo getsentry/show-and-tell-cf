@@ -5,7 +5,7 @@ import {SESSION_COOKIE_NAME} from '../../src/worker/middleware/auth';
 import {createSession} from '../../src/worker/services/sessions';
 import {synchronizeGoogleUser} from '../../src/worker/services/users';
 import type {ShowRemindersResponse} from '../../src/shared/reminders';
-import {defaultEmailTemplate, renderEmail} from '../../src/shared/email-template';
+import {renderEmail} from '../../src/shared/email-template';
 
 const origin = 'https://showntell.test';
 beforeEach(async () => {
@@ -93,7 +93,6 @@ it('returns exact previews, destinations, due time and status without sending or
   });
   expect(email.message).toBe(
     renderEmail(
-      defaultEmailTemplate,
       {
         id: 'planned-show',
         title: 'Special Show',

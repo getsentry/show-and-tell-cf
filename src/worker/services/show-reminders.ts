@@ -1,5 +1,4 @@
 import {renderEmail, type EmailShow} from '../../shared/email-template';
-import {readEmailTemplate} from './email-template';
 
 export interface ReminderEnv {
   DB: D1Database;
@@ -27,7 +26,6 @@ export class ReminderConfigurationError extends Error {
 export async function processShowReminders(env: ReminderEnv, now = new Date()) {
   if (env.SHOW_REMINDERS_ENABLED !== 'true') return;
   const origin = reminderOrigin(env.APP_ORIGIN);
-  const {template} = await readEmailTemplate(env.DB);
   const timestamp = now.toISOString();
   const stale = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   await env.DB.batch([
@@ -72,7 +70,7 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
         .bind(id)
         .first<EmailShow>();
       if (!show) throw new Error('Planned show missing');
-      const email = renderEmail(template, show, origin);
+      const email = renderEmail(show, origin);
       deliveryStarted = true;
       const result = await env.SHOW_EMAIL.send({
         from: env.SHOW_EMAIL_FROM,

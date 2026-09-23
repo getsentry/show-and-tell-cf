@@ -2,7 +2,8 @@ import {useEffect, useState} from 'react';
 import type {ShowReminder, ShowRemindersResponse} from '../shared/reminders';
 import {submissionPath} from '../shared/playlist';
 import {api, errorMessage} from './api';
-import {EmailTemplateEditor, EmailPreviewFrame} from './EmailTemplateEditor';
+import {EmailPreviewFrame} from './EmailPreviewFrame';
+import {TestEmailButton} from './TestEmailButton';
 
 const statusLabels = {
   pending: 'Pending',
@@ -14,7 +15,6 @@ const statusLabels = {
 } satisfies Record<ShowReminder['status'], string>;
 
 export function ReminderList() {
-  const [editing, setEditing] = useState(false);
   const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
   const [data, setData] = useState<ShowRemindersResponse | null>(null);
@@ -47,17 +47,6 @@ export function ReminderList() {
         the first check after the due time. Opening the list or preview does not send
         messages.
       </p>
-      <button aria-expanded={editing} onClick={() => setEditing((value) => !value)}>
-        {editing ? 'Close email editor' : 'Edit email template'}
-      </button>
-      {editing ? (
-        <EmailTemplateEditor
-          shows={(data?.reminders ?? [])
-            .filter((entry) => entry.channel === 'email')
-            .map((entry) => ({id: entry.eventId, title: entry.eventTitle}))}
-          onSaved={() => setRevision((value) => value + 1)}
-        />
-      ) : null}
       {error ? (
         <p role="alert">{error}</p>
       ) : !data ? (
@@ -148,6 +137,9 @@ export function ReminderList() {
                         <p>Preview unavailable. Check the configuration and show date.</p>
                       )}
                     </details>
+                    {reminder.html ? (
+                      <TestEmailButton eventId={reminder.eventId} />
+                    ) : null}
                   </article>
                 </li>
               ))}

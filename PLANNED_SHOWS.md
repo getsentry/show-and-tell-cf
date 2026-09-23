@@ -98,31 +98,24 @@ Use the approved infrastructure workflow for configuration changes. Keep the tea
 
 ## Send A Test Email
 
-In **View reminders → Edit email template**, select a show, preview the draft and click **Send test to me**. It sends the current unsaved draft through the same `SHOW_EMAIL` binding and `SHOW_EMAIL_FROM` sender, with a `[TEST]` subject prefix, only to the signed-in admin's Sentry address. Recipient overrides are not supported. Member view cannot send tests.
+In **View reminders**, click **Send test to me** on a show’s reminder card. It sends the static email through the same `SHOW_EMAIL` binding and `SHOW_EMAIL_FROM` sender, with a `[TEST]` subject prefix, only to the signed-in admin's Sentry address. Recipient overrides are not supported. Member view cannot send tests.
 
-Tests work independently of `SHOW_REMINDERS_ENABLED` and do not save the template, reveal a show, or modify scheduled delivery records. They have a separate attempt ledger. Rechecking the same attempt never resends; distinct attempts are limited to one per admin per minute. For uncertain results, check your inbox before explicitly starting another test.
+Tests work independently of `SHOW_REMINDERS_ENABLED` and do not reveal a show or modify scheduled delivery records. They have a separate attempt ledger. Rechecking the same attempt never resends; distinct attempts are limited to one per admin per minute. For uncertain results, check your inbox before explicitly starting another test.
 
 The email binding must permit the admin's test address in addition to the scheduled recipient. If it is restricted to `team@sentry.io`, use an approved recipient allowlist including the test admin rather than removing all destination restrictions. A provider error can be ambiguous; the UI does not display raw provider details or retry automatically. Provider acceptance is not confirmed inbox delivery.
 
-## Editable Email Template
+## Email Copy
 
-Admins open **View reminders → Edit email template** to change the subject, inbox preview, headline, introduction, submission instructions, newcomer welcome, help contacts and button label. The template is shared across shows.
+Edit `src/shared/email-template.ts` to change the email copy or layout. There is no editor or database template. Scheduled delivery, previews and personal tests use the same HTML/plain-text renderer.
 
-Select a planned show from the current reminder page and use **Preview draft email** for unsaved copy. **Save email template** applies it to future email runs without sending, retrying or changing recipients. Reload after a concurrent-edit conflict. **Use default copy** loads defaults into the draft; save explicitly to apply them.
-
-Supported placeholders: `{{title}}`, `{{show_times}}`, `{{demo_minutes}}`. The generated start-time block shows the date and DST-correct Los Angeles, New York and Vienna times. There is no submission deadline: participants upload directly and the videos available when the meeting starts are used. The demo limit defaults to five minutes and is editable.
-
-The email includes emoji accents, one submission card/button, a literal submission URL, and a linked newcomer sentence. In **Help and contacts**, separate sections with blank lines; the first line becomes a bold label and the following lines are regular text. Avoid hardcoded relative dates or seasonal timezone abbreviations in reusable copy.
-
-HTML and plain-text delivery use the same renderer as previews. Editable copy is escaped text, not executable HTML. Template revisions record actor and timestamp and prevent stale overwrites. A save does not change a scheduler run already underway, accepted mail, or already-sent content.
+The email includes the submission link, linked newcomer guide, help contacts, and DST-correct San Francisco, New York and Vienna start times. Demos are under five minutes; there is no submission deadline. After changing the copy, send yourself a test email and inspect it in your mail client.
 
 ## Implementation Map
 
 - `tools/shows.mjs`: event operations and preview/apply workflow.
 - `src/worker/services/show-reminders.ts`: reveal, delivery and status handling.
-- `src/shared/email-template.ts`: template fields, validation and HTML/plain-text rendering.
-- `src/worker/services/email-template.ts`: stored template revisions and compatibility handling.
-- `src/worker/routes/reminders.ts` and `src/worker/routes/email-template.ts`: admin status and template APIs.
-- `src/app/ReminderList.tsx` and `src/app/EmailTemplateEditor.tsx`: admin interface.
+- `src/shared/email-template.ts`: static email copy and HTML/plain-text rendering.
+- `src/worker/routes/reminders.ts`: admin status and personal test-email API.
+- `src/app/ReminderList.tsx` and `src/app/TestEmailButton.tsx`: admin interface.
 
 Historical Slack delivery rows are retained for audit but are not shown as active reminders. Unsent Slack work is retired, and the scheduler and operator only send/retry email. Historical accepted or uncertain deliveries still protect against silently changing an announced show.

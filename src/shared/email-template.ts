@@ -1,34 +1,5 @@
 import {eventSlug, submissionPath} from './playlist';
-import {isJsonObject, isJsonString, isJsonNumber, type JsonInput} from './json';
 
-export const templateFields = {
-  subject: {label: 'Subject', max: 200},
-  preheader: {label: 'Inbox preview', max: 300},
-  headline: {label: 'Headline', max: 200},
-  intro: {label: 'Introduction', max: 2000},
-  participation: {label: 'Submission instructions', max: 2000},
-  button: {label: 'Submission button', max: 80},
-  help: {label: 'Newcomer welcome', max: 1000},
-  questions: {label: 'Help and contacts', max: 1000},
-} as const;
-export type TemplateField = keyof typeof templateFields;
-export const templateFieldKeys = [
-  'subject',
-  'preheader',
-  'headline',
-  'intro',
-  'participation',
-  'button',
-  'help',
-  'questions',
-] as const satisfies readonly TemplateField[];
-export type EmailTemplate = Record<TemplateField, string> & {
-  demoMinutes: number;
-};
-export interface EmailTemplateResponse {
-  template: EmailTemplate;
-  revision: number;
-}
 export interface EmailPreview {
   subject: string;
   text: string;
@@ -41,56 +12,6 @@ export interface EmailShow {
   starts_at: string;
   meeting_url: string | null;
 }
-export const defaultEmailTemplate: EmailTemplate = {
-  subject: '🎬 {{title}}: submissions are open',
-  preheader: 'Upload your video for the next Show & Tell.',
-  headline: '{{title}}',
-  intro: 'Hi all! 👋\n\nIt’s that time again. The time to show and the time to tell.',
-  participation:
-    '👉 Upload your video using the link below. We’ll show the videos that are there when the meeting starts. Please keep demos below {{demo_minutes}} mins.',
-  button: 'Upload your demo →',
-  help: '👋 Psst, new to Sentry? Learn more about Show & Tell',
-  questions:
-    '💬 Questions?\nJump into Slack #discuss-show-n-tell.\n\n🙋 Need a hand?\nAsk @jr or @sergical. We’ll help!',
-  demoMinutes: 5,
-};
-export const templateTokens = ['title', 'show_times', 'demo_minutes'] as const;
-
-export function validateEmailTemplate(input: JsonInput): EmailTemplate {
-  if (!isJsonObject(input)) throw new Error('Provide an email template.');
-  const result = {...defaultEmailTemplate};
-  for (const field of templateFieldKeys) {
-    const text = input[field];
-    if (!isJsonString(text) || !text.trim() || text.length > templateFields[field].max)
-      throw new Error(
-        `${templateFields[field].label} is required (maximum ${templateFields[field].max} characters).`,
-      );
-    if (
-      Array.from(text).some(
-        (char) => isControl(char) && !['\t', '\r', '\n'].includes(char),
-      ) ||
-      (field === 'subject' && /[\r\n]/.test(text))
-    )
-      throw new Error('Template contains unsupported control characters.');
-    const remainder = text.replace(/\{\{(title|show_times|demo_minutes)\}\}/g, '');
-    if (remainder.includes('{{') || remainder.includes('}}'))
-      throw new Error('Unknown placeholder. Use title, show_times or demo_minutes.');
-    result[field] = text.trim();
-  }
-  for (const [field, min, max] of [['demoMinutes', 1, 60]] as const) {
-    const number = input[field];
-    if (
-      !isJsonNumber(number) ||
-      !Number.isInteger(number) ||
-      number < min ||
-      number > max
-    )
-      throw new Error(`${field} must be a whole number from ${min} to ${max}.`);
-    result[field] = number;
-  }
-  return result;
-}
-
 const learnUrl =
   'https://www.notion.so/sentry/Show-Tell-c607fc1d95064cbfbd3acc7f98689d38';
 function isControl(char: string) {
@@ -141,12 +62,8 @@ export class InvalidMeetingUrlError extends Error {
   }
 }
 
-/** One renderer for delivery and admin previews. Editable copy is plain text, never HTML. */
-export function renderEmail(
-  template: EmailTemplate,
-  show: EmailShow,
-  origin: string,
-): EmailPreview {
+/** Static email used by scheduled delivery, previews and personal test sends. */
+export function renderEmail(show: EmailShow, origin: string): EmailPreview {
   const url = new URL(origin);
   if (url.protocol !== 'https:' || url.username || url.password)
     throw new Error('Configure an HTTPS APP_ORIGIN.');
@@ -156,19 +73,18 @@ export function renderEmail(
   ).href;
   const start = new Date(show.starts_at);
   const schedule = showSchedule(start);
-  const tokens = {
-    title: show.title,
-    show_times: schedule.text,
-    demo_minutes: String(template.demoMinutes),
+  const content = {
+    subject: `🎬 ${show.title}: submissions are open`,
+    preheader: 'Upload your video for the next Show & Tell.',
+    headline: show.title,
+    intro: 'Hi all! 👋\n\nIt’s that time again. The time to show and the time to tell.',
+    participation:
+      '👉 Upload your video using the link below. We’ll show the videos that are there when the meeting starts. Please keep demos below 5 mins.',
+    button: 'Upload your demo →',
+    help: '👋 Psst, new to Sentry? Learn more about Show & Tell',
+    questions:
+      '💬 Questions?\nJump into Slack #discuss-show-n-tell.\n\n🙋 Need a hand?\nAsk @jr or @sergical. We’ll help!',
   };
-  // Single pass: event titles cannot introduce additional template expressions.
-  const replace = (text: string) =>
-    text.replace(
-      /\{\{(title|show_times|demo_minutes)\}\}/g,
-      (_, token: keyof typeof tokens) => tokens[token],
-    );
-  const content = {...template};
-  for (const key of templateFieldKeys) content[key] = replace(template[key]);
   const subject = Array.from(content.subject)
     .map((char) => (isControl(char) ? ' ' : char))
     .join('')
@@ -204,7 +120,7 @@ export function renderEmail(
 <tr><td style="padding:32px">${paragraphs(content.intro)}
 ${schedule.html}
 ${paragraphs(content.participation)}
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #c9baec;border-radius:12px"><tr><td style="padding:24px;text-align:center"><p style="margin:0 0 8px;font-size:12px;letter-spacing:2px;color:#65527b">🎬 SUBMISSIONS</p><h2 style="margin:0 0 16px;font-size:24px">${escape(show.title)}</h2>${button}<p style="margin:14px 0 0;font-size:12px;color:#65527b">Sentry login required · Under ${template.demoMinutes} minutes</p><p style="margin:10px 0 0;font-size:12px;overflow-wrap:anywhere;word-break:break-all"><a href="${escape(submissionUrl)}" style="color:#6341cc">${escape(submissionUrl)}</a></p></td></tr></table>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #c9baec;border-radius:12px"><tr><td style="padding:24px;text-align:center"><p style="margin:0 0 8px;font-size:12px;letter-spacing:2px;color:#65527b">🎬 SUBMISSIONS</p><h2 style="margin:0 0 16px;font-size:24px">${escape(show.title)}</h2>${button}<p style="margin:14px 0 0;font-size:12px;color:#65527b">Sentry login required · Under 5 minutes</p><p style="margin:10px 0 0;font-size:12px;overflow-wrap:anywhere;word-break:break-all"><a href="${escape(submissionUrl)}" style="color:#6341cc">${escape(submissionUrl)}</a></p></td></tr></table>
 <div style="margin-top:28px;border-top:1px solid #ddd5eb;padding-top:24px"><h2 style="margin:0 0 18px;font-size:18px">Info &amp; help</h2><p style="margin:0 0 20px;line-height:1.65"><a href="${learnUrl}" style="color:#6341cc">${escape(help)}</a></p>${questions
     .split(/\n\n+/)
     .map((part) => {
