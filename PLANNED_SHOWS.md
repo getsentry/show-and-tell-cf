@@ -2,6 +2,18 @@
 
 The approved event list, not a monthly recurrence, is the source of truth. Junior accepts plain English, confirms exact dates and targets, and runs the operator below using existing Cloudflare credentials. No ICS import, Google session reuse, public admin endpoint, or new service token is needed.
 
+## Editable Email Template
+
+Admins can open **View reminders → Edit email template** to change the subject, inbox preview, headline, introduction, participation instructions, newcomer welcome, help contacts, closing and submission-button label. This is a shared template for all future email attempts, not per-show copy. **Preview draft email** renders unsaved copy for a selected planned show on the current reminder page. **Save email template** persists it without sending or retrying anything. Reload before saving after a concurrent-edit conflict. Defaults can be loaded into the draft and then saved explicitly.
+
+The initial copy follows the Show & Tell reminder: time to show/time to tell, videos under five minutes, west-coast upload-the-night-before nudge, the supplied Notion guide, `#discuss-show-n-tell`, and `@jr` / `@sergical`. Emails have a purple header, a prominent submission card/button, the literal submission URL, and a plain-text alternative. This card is built into the email, not an external unfurl of the authenticated submission page. No external images or tracking pixels are required. Browser desktop/mobile rendering is verified; mailbox-client and mailing-list delivery still need the approved rollout test.
+
+Supported placeholders are `{{title}}`, `{{show_times}}`, `{{deadline_times}}`, and `{{demo_minutes}}`. Times derive from the planned UTC instant in Los Angeles, New York and Vienna, with actual daylight-saving offsets (including weeks where DST changes differ). The initial upload deadline is three hours before the show and the demo limit is five minutes; both are editable. This deadline is communication only, not upload enforcement. Avoid hardcoding “next Thursday,” dates or timezone abbreviations in reusable copy.
+
+Apply `migrations/0008_email_templates.sql` with the app deployment before using the editor or scheduler. `show_email_templates` retains numbered revisions with actor and timestamp; optimistic concurrency prevents silent overwrites. `src/shared/email-template.ts` owns default copy, validation and the HTML/plain-text renderer. Editable copy is escaped text, never executable HTML. `src/worker/routes/email-template.ts` enforces admin view and the existing same-origin mutation checks. The UI renders HTML in a sandboxed, restrictive-CSP iframe.
+
+The scheduler loads the latest saved template at the start of each run; a save does not change a run already underway, an accepted email, or Slack copy. Reminder previews use current saved copy, not archived sent content. Changes do not enable delivery, alter recipients, reset delivery rows, or trigger sends. A template revision is not proof of which content a provider accepted.
+
 ## Visibility And Links
 
 `is_hidden` hides a playlist from the member overview. Admins still see it in their overview and playlist navigation, marked **Hidden**. Admins switched to user view get the same filtered list as members. Canceled shows remain excluded from the overview for everyone. Direct submission and screening links remain usable by authenticated Sentry users. This is discoverability, not authorization. Submission moderation remains unchanged.

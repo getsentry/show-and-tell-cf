@@ -19,6 +19,7 @@ const payload: ShowRemindersResponse = {
       destination: 'team@sentry.io',
       blockedReasons: ['Automatic reminders are disabled.'],
       subject: 'Submit your demo: October Show',
+      html: null,
       message: 'Add your demo: https://example.test/events/show/october',
       submissionUrl: 'https://example.test/events/show/october',
       attemptedAt: null,

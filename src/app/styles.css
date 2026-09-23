@@ -2341,3 +2341,47 @@ kbd {
     grid-template-columns: 1fr;
   }
 }
+
+.emailTemplateEditor {
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.emailTemplateEditor fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.emailTemplateEditor label {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.emailTemplateEditor textarea,
+.emailTemplateEditor select,
+.emailTemplateEditor input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 10px;
+}
+.emailTemplateActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.emailPreviewFrame {
+  display: block;
+  width: 100%;
+  height: 900px;
+  border: 1px solid #ddd5eb;
+  border-radius: 10px;
+  margin: 16px 0;
+  background: #fff;
+}
+.emailTemplateEditor pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

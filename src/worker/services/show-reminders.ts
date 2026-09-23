@@ -1,4 +1,6 @@
 import {eventSlug, submissionPath} from '../../shared/playlist';
+import {renderEmail} from '../../shared/email-template';
+import {readEmailTemplate} from './email-template';
 
 export interface ReminderEnv {
   DB: D1Database;
@@ -31,10 +33,6 @@ export function reminderText(show: PlannedShow, origin: string) {
   return `${show.title}\n${date} (${show.timezone})\n\nHave something to demo? Add your submission and upload your video:\n${link}\n\nSentry login required.${show.meeting_url ? `\nJoin the show: ${show.meeting_url}` : ''}`;
 }
 
-export function reminderSubject(title: string) {
-  return `Submit your demo: ${title}`;
-}
-
 export function reminderOrigin(value?: string) {
   if (!value || !URL.canParse(value)) throw new ReminderConfigurationError();
   const origin = new URL(value);
@@ -54,6 +52,7 @@ export class ReminderConfigurationError extends Error {
 export async function processShowReminders(env: ReminderEnv, now = new Date()) {
   if (env.SHOW_REMINDERS_ENABLED !== 'true') return;
   const origin = reminderOrigin(env.APP_ORIGIN);
+  const {template} = await readEmailTemplate(env.DB);
   const timestamp = now.toISOString();
   const stale = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   await env.DB.batch([
@@ -105,8 +104,7 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
           const result = await env.SHOW_EMAIL!.send({
             from: env.SHOW_EMAIL_FROM!,
             to: 'team@sentry.io',
-            subject: reminderSubject(show.title),
-            text,
+            ...renderEmail(template, show, origin),
           });
           providerId = result.messageId;
           status = 'sent';

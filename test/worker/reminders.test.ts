@@ -5,6 +5,7 @@ import {SESSION_COOKIE_NAME} from '../../src/worker/middleware/auth';
 import {createSession} from '../../src/worker/services/sessions';
 import {synchronizeGoogleUser} from '../../src/worker/services/users';
 import type {ShowRemindersResponse} from '../../src/shared/reminders';
+import {defaultEmailTemplate, renderEmail} from '../../src/shared/email-template';
 import {reminderText} from '../../src/worker/services/show-reminders';
 
 const origin = 'https://showntell.test';
@@ -88,7 +89,7 @@ it('returns exact previews, destinations, due time and status without sending or
     scheduledAt: '2099-10-01T16:00:00.000Z',
     timezone: 'America/Los_Angeles',
     destination: 'team@sentry.io',
-    subject: 'Submit your demo: Special Show',
+    subject: 'Time to show. Time to tell. — Special Show',
     blockedReasons: [],
   });
   expect(slack).toMatchObject({
@@ -98,6 +99,20 @@ it('returns exact previews, destinations, due time and status without sending or
     blockedReasons: [],
   });
   expect(email.message).toBe(
+    renderEmail(
+      defaultEmailTemplate,
+      {
+        id: 'planned-show',
+        title: 'Special Show',
+        slug: 'special-show',
+        starts_at: '2099-10-08T16:00:00.000Z',
+        meeting_url: 'https://meet.google.com/abc-defg-hij',
+      },
+      origin,
+    ).text,
+  );
+  expect(email.html).toContain('Upload your demo');
+  expect(slack.message).toBe(
     reminderText(
       {
         id: 'planned-show',
@@ -110,7 +125,6 @@ it('returns exact previews, destinations, due time and status without sending or
       origin,
     ),
   );
-  expect(slack.message).toBe(email.message);
   expect(JSON.stringify(body)).not.toContain('SECRET');
   expect(JSON.stringify(body)).not.toContain('sender@example.test');
   expect(send).not.toHaveBeenCalled();

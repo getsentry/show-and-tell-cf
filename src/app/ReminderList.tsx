@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react';
 import type {ShowReminder, ShowRemindersResponse} from '../shared/reminders';
 import {submissionPath} from '../shared/playlist';
 import {api, errorMessage} from './api';
+import {EmailTemplateEditor, EmailPreviewFrame} from './EmailTemplateEditor';
 
 const statusLabels = {
   pending: 'Pending',
@@ -13,6 +14,7 @@ const statusLabels = {
 } satisfies Record<ShowReminder['status'], string>;
 
 export function ReminderList() {
+  const [editing, setEditing] = useState(false);
   const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
   const [data, setData] = useState<ShowRemindersResponse | null>(null);
@@ -42,8 +44,20 @@ export function ReminderList() {
       </div>
       <p className="formHint">
         Pending upcoming reminders appear first. Delivery runs hourly at minute 17 UTC, on
-        the first check after the due time. This read-only view does not send messages.
+        the first check after the due time. Opening the list or preview does not send
+        messages.
       </p>
+      <button aria-expanded={editing} onClick={() => setEditing((value) => !value)}>
+        {editing ? 'Close email editor' : 'Edit email template'}
+      </button>
+      {editing ? (
+        <EmailTemplateEditor
+          shows={(data?.reminders ?? [])
+            .filter((entry) => entry.channel === 'email')
+            .map((entry) => ({id: entry.eventId, title: entry.eventTitle}))}
+          onSaved={() => setRevision((value) => value + 1)}
+        />
+      ) : null}
       {error ? (
         <p role="alert">{error}</p>
       ) : !data ? (
@@ -124,8 +138,16 @@ export function ReminderList() {
                           <strong>Subject:</strong> {reminder.subject}
                         </p>
                       ) : null}
+                      {reminder.html ? <EmailPreviewFrame html={reminder.html} /> : null}
                       {reminder.message ? (
-                        <pre>{reminder.message}</pre>
+                        reminder.html ? (
+                          <details>
+                            <summary>Plain-text fallback</summary>
+                            <pre>{reminder.message}</pre>
+                          </details>
+                        ) : (
+                          <pre>{reminder.message}</pre>
+                        )
                       ) : (
                         <p>Preview unavailable. Check the configuration and show date.</p>
                       )}

@@ -9,6 +9,7 @@ export interface ShowReminder {
   blockedReasons: string[];
   subject: string | null;
   message: string | null;
+  html: string | null;
   submissionUrl: string | null;
   attemptedAt: string | null;
   completedAt: string | null;

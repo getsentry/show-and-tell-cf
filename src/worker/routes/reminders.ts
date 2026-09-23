@@ -5,10 +5,12 @@ import {eventSlug, submissionPath} from '../../shared/playlist';
 import type {ShowReminder, ShowRemindersResponse} from '../../shared/reminders';
 import {
   reminderOrigin,
-  reminderSubject,
   reminderText,
   validSlackWebhook,
 } from '../services/show-reminders';
+
+import {renderEmail} from '../../shared/email-template';
+import {readEmailTemplate} from '../services/email-template';
 
 export const reminderRoutes = new Hono<WorkerEnv>();
 interface ReminderRow {
@@ -56,6 +58,7 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
     channelLabel && /^#[a-z0-9_-]{1,80}$/.test(channelLabel)
       ? channelLabel
       : 'Slack channel not labeled';
+  const {template} = await readEmailTemplate(c.env.DB);
   const reminders = results.slice(0, 50).map((row): ShowReminder => {
     const blockedReasons: string[] = [];
     if (!enabled) blockedReasons.push('Automatic reminders are disabled.');
@@ -70,9 +73,16 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
     if (row.channel === 'slack' && !validSlackWebhook(c.env.SHOW_SLACK_WEBHOOK))
       blockedReasons.push('Slack webhook is not configured.');
     let message: string | null = null;
+    let subject: string | null = null;
+    let html: string | null = null;
     if (origin) {
       try {
-        message = reminderText(row, origin);
+        if (row.channel === 'email') {
+          const email = renderEmail(template, row, origin);
+          message = email.text;
+          subject = email.subject;
+          html = email.html;
+        } else message = reminderText(row, origin);
       } catch {
         blockedReasons.push('The show date or timezone needs correction.');
       }
@@ -86,7 +96,8 @@ reminderRoutes.get('/', requireRole('admin'), async (c) => {
       timezone: row.timezone,
       destination: row.channel === 'email' ? 'team@sentry.io' : slackDestination,
       blockedReasons,
-      subject: row.channel === 'email' ? reminderSubject(row.title) : null,
+      subject,
+      html,
       message,
       submissionUrl: origin
         ? new URL(submissionPath(row.id, row.slug || eventSlug(row.title)), origin).href
