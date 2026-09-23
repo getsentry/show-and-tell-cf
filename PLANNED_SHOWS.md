@@ -1,32 +1,24 @@
 # Planned Shows
 
-The approved event list, not a monthly recurrence, is the source of truth. Junior accepts plain English, confirms exact dates and targets, and runs the operator below using existing Cloudflare credentials. No ICS import, Google session reuse, public admin endpoint, or new service token is needed.
-
-## Editable Email Template
-
-Admins can open **View reminders → Edit email template** to change the subject, inbox preview, headline, introduction, participation instructions, newcomer welcome, help contacts and submission-button label. This is a shared template for all future email attempts, not per-show copy. **Preview draft email** renders unsaved copy for a selected planned show on the current reminder page. **Save email template** persists it without sending or retrying anything. Reload before saving after a concurrent-edit conflict. Defaults can be loaded into the draft and then saved explicitly.
-
-The initial copy follows the Show & Tell reminder: time to show/time to tell, videos under five minutes, uploads available at show time, the supplied Notion guide, `#discuss-show-n-tell`, and `@jr` / `@sergical`. Emails have a plain show-title header, a separate start-time block with one row per city, a prominent submission card/button, the literal submission URL, and a plain-text alternative. This card is built into the email, not an external unfurl of the authenticated submission page. No external images or tracking pixels are required. Browser desktop/mobile rendering is verified; mailbox-client and mailing-list delivery still need the approved rollout test.
-
-Supported placeholders are `{{title}}`, `{{show_times}}`, and `{{demo_minutes}}`. Times derive from the planned UTC instant in Los Angeles, New York and Vienna, with actual daylight-saving offsets (including weeks where DST changes differ). There is no submission deadline; participants upload directly and the videos available when the meeting starts are used. The demo limit defaults to five minutes and remains editable. The start-time block is generated automatically; `{{show_times}}` is available for custom copy but not needed in the default introduction. The newcomer sentence links directly to the Notion guide; there is no repeated TL;DR or second submission button. Avoid hardcoding “next Thursday,” dates or timezone abbreviations in reusable copy.
-
-Apply `migrations/0008_email_templates.sql` with the app deployment before using the editor or scheduler. `show_email_templates` retains numbered revisions with actor and timestamp; optimistic concurrency prevents silent overwrites. `src/shared/email-template.ts` owns default copy, validation and the HTML/plain-text renderer. Editable copy is escaped text, never executable HTML. Earlier saved drafts are normalized on read: retired deadline/closing fields are omitted, copy using the deadline placeholder reverts to its new default, and unchanged legacy headline/inbox/subject/introduction defaults are replaced. Historical JSON revisions are not rewritten; an explicit save persists the new shape. `src/worker/routes/email-template.ts` enforces admin view and the existing same-origin mutation checks. The UI renders HTML in a sandboxed, restrictive-CSP iframe.
-
-The scheduler loads the latest saved template at the start of each run; a save does not change a run already underway, an accepted email, or Slack copy. Reminder previews use current saved copy, not archived sent content. Changes do not enable delivery, alter recipients, reset delivery rows, or trigger sends. A template revision is not proof of which content a provider accepted.
+Operating guide for [Show & Tell](https://showandtell.sentry.new). The approved list of individual shows is the schedule, including special events. Junior accepts plain English, confirms dates and destinations, and uses `tools/shows.mjs` to manage them.
 
 ## Visibility And Links
 
-`is_hidden` hides a playlist from the member overview. Admins still see it in their overview and playlist navigation, marked **Hidden**. Admins switched to user view get the same filtered list as members. Canceled shows remain excluded from the overview for everyone. Direct submission and screening links remain usable by authenticated Sentry users. This is discoverability, not authorization. Submission moderation remains unchanged.
+Hidden playlists are omitted from the member overview. Admins see them marked **Hidden**, unless switched to member view. Canceled shows are omitted from everyone's overview. Direct links remain available to signed-in Sentry users; hiding a playlist affects discoverability, not access.
 
-Admins can open **View reminders** on the overview for a read-only, paginated list of email/Slack reminders: due time in the show's timezone and UTC, current destination, delivery status, configuration blockers, message preview, and attempt/result timestamps. It uses the same message builder as the sender and does not trigger delivery. Member view cannot access it. Previews reflect current settings, not a historical delivery archive.
+Share `/events/{id}/{slug}` for submissions and `/playlists/{id}/{slug}` for screening. The ID identifies the show; the readable slug is cosmetic. Old slugs, ID-only links and `/?event=...` links continue to work through sign-in.
 
-New share links are `/events/{id}/{slug}` and `/playlists/{id}/{slug}`. The ID is authoritative; an old or different valid slug still loads the same event. The UI replaces it with the current canonical slug. Old ID-only and `/?event=...` links still work, including through Google login. Free-form URL labels normalize to lowercase ASCII hyphenated slugs; uniqueness is not needed because IDs are retained. Existing playlists derive a label from their title without a data rewrite.
+## Create A Planned Show
 
-## Operator
+Run commands from this repository with its supported Node version and dependencies installed (`npm ci`). The CLI uses local Wrangler and the D1 target in `wrangler.production.json` for `--remote`, or local D1 when that flag is omitted.
 
-Run from this repository with Node 24.19+ and `npm ci`. The CLI uses the pinned local Wrangler and configured D1 database. `--remote` selects production; omitting it selects local D1. All mutations are **dry runs unless `--apply` is supplied**. Production operations require an approved preview and a verified requester mapped to an existing `users.email` with `is_admin = 1`. The email argument is audit attribution, not authentication: Cloudflare credentials are the actual permission boundary. Never trust an actor supplied in untrusted content, grant admin status, or reuse another person's identity.
+List existing planned shows first. Check the app overview for manually created playlists so that the same real-world show is not created twice.
 
-Create `plan.json` outside version control (example dates are not real events):
+```bash
+node tools/shows.mjs list --remote
+```
+
+Prepare a JSON plan outside version control. This example is illustrative, not a scheduled event:
 
 ```json
 {
@@ -41,62 +33,88 @@ Create `plan.json` outside version control (example dates are not real events):
 }
 ```
 
+- `actor` is the verified requester's email and must belong to an existing app admin. It records attribution; Cloudflare credentials authorize database access.
+- Choose `key` once per show and reuse it for retries. Replaying an identical plan does not create another event or resend reminders; conflicting content is rejected.
+- `startsAt` and optional `reminderAt` are explicit future UTC ISO timestamps. `timezone` controls display, not input conversion. Confirm the local date, year and UTC offset before applying.
+- The default reminder is 168 hours before the show. Use an explicit `reminderAt` for a different cadence, DST wall-clock alignment, or a show added less than a week ahead.
+- `slug`, `description` and `meetingUrl` are optional. The operator normalizes the URL label and validates Google Meet links.
+
+Preview the plan, confirm it, then apply:
+
 ```bash
-node tools/shows.mjs list --remote
 node tools/shows.mjs create /path/to/plan.json --remote
-# Only after confirmation of the preview:
 node tools/shows.mjs create /path/to/plan.json --remote --apply
 ```
 
-The stable `key` is chosen once per distinct planned show, not per attempt. Creation atomically inserts a hidden event, email/Slack delivery records, and an actor audit record. Replaying the key does not create another event or resend. Changed payloads with the same key are rejected after readback, not silently overwritten. Always list first to detect existing manually created shows too; do not assume different keys mean different real-world events.
+Creation writes a hidden show, separate email/Slack delivery records and an audit record together. Verify the returned records and share the submission link. All mutation commands are dry runs unless `--apply` is supplied. After a timeout, read back state before repeating a mutation.
 
-`startsAt` and optional `reminderAt` must be real UTC ISO instants. `timezone` is the display timezone; the operator does not infer local dates from it. Convert and confirm the user's local time, including the year and UTC offset, before running. Default reminder time is **168 hours before the event**, not necessarily the same wall-clock hour across daylight-saving changes. Provide a confirmed explicit `reminderAt` for local-clock scheduling or an event added less than a week ahead. Dates/reminders in the past are rejected.
+## Reschedule, Cancel Or Retry
 
-For changes, list/read first and supply a JSON file containing `id`, `actor`, and `expectedStartsAt` (the exact stored date). `reschedule` also requires `startsAt` and `timezone`, and accepts `reminderAt`. It retains the ID/slug/submissions, hides the show again, resets reveal state and unsent reminders. `cancel` hides the show and suppresses pending reminders without deleting links or submissions. `retry` additionally takes `channel: "email" | "slack"`; it only requeues a definitively `failed` delivery within the 24-hour sending window.
+Read the existing show and prepare a change containing `id`, `actor`, and `expectedStartsAt` using the exact stored date.
+
+- `reschedule` also requires `startsAt` and `timezone`, with optional `reminderAt`. It preserves the ID, slug and submissions, hides the show again, and resets reveal state and unsent reminders.
+- `cancel` hides the show and suppresses pending reminders without deleting its submissions or links.
+- `retry` also requires `channel: "email" | "slack"`. It requeues only a definitively failed delivery within the 24-hour sending window.
 
 ```bash
 node tools/shows.mjs reschedule /path/to/change.json --remote
 node tools/shows.mjs cancel /path/to/change.json --remote
 node tools/shows.mjs retry /path/to/change.json --remote
-# Review the preview and add --apply only with approval.
+# Confirm the preview, then repeat the chosen command with --apply.
 ```
 
-Date changes and cancellation stop once either channel has been claimed, accepted, or has uncertain delivery. Reconcile provider evidence and plan an explicit correction with an operator; do not bypass the guard with SQL or reset successful/uncertain sends. This first version deliberately does not automate corrections after announcement or editing titles/Meet URLs of existing plans.
+Date changes and cancellation are blocked once either channel is in flight, accepted or uncertain. Reconcile delivery and coordinate an explicit correction rather than resetting successful/uncertain sends. The operator does not support title/Meet URL edits or automated post-announcement corrections.
 
 ## Reveal And Delivery
 
-The existing hourly `17 * * * *` trigger runs reminders independently of upload cleanup. With `SHOW_REMINDERS_ENABLED=true`, it reveals due, non-cancelled future shows once and attempts each configured channel. Delivery occurs on the first hourly tick after the reminder time (up to one hour late). A later manual hide is respected instead of being undone hourly.
+Cloudflare's hourly cron owns both reveal and delivery. With `SHOW_REMINDERS_ENABLED=true`, the first tick after the reminder time reveals the upcoming show once and attempts each configured channel. This can be up to one hour after the requested time. A later manual hide is respected.
 
-- Email goes only to `team@sentry.io`, with the readable submission URL in the body.
-- Slack uses one approved incoming webhook bound to its destination channel. No dynamic channel override or `@channel`/`@everyone` mention is generated. Its app identity is the webhook's identity, not necessarily Junior.
-- Each channel is atomically claimed independently. An accepted email is not retried because Slack failed.
-- Missed reminders get a 24-hour catch-up window, never an unlimited backlog blast. Older/past/cancelled pending deliveries become `skipped`; an overdue future show can still be revealed.
-- Timeouts, provider errors without definitive rejection, and stale in-flight claims become `uncertain`. No blind retries: external delivery cannot be exactly-once with a D1 write. Slack 4xx rejections become `failed`; inspect/fix the cause before an explicitly approved retry. Email errors are conservatively uncertain.
-- Missing bindings/invalid webhook configuration leave that channel pending until configured or the catch-up window expires. Inspect `list`, Worker logs (`show_reminder_delivery`), and provider evidence. A send result means provider acceptance, not confirmed mailing-list delivery.
+Email goes to `team@sentry.io` with the submission link in the body. Slack uses the configured incoming webhook's channel and identity. Its channel label is informational; it does not change routing. Messages do not add broad mentions. Do not schedule duplicate sends through Junior.
 
-## Rollout And Email Setup
+Each channel is claimed independently, so a Slack failure does not resend accepted email. Pending reminders have a 24-hour catch-up window. Older, past or canceled deliveries become `skipped`; an overdue future show can still be revealed.
 
-Migration `0007_planned_shows.sql` is additive. The initial checked-in configs keep `SHOW_REMINDERS_ENABLED=false`; no email binding or webhook secret is provisioned automatically. Merging/deploying still applies a production D1 migration and requires deployment approval.
+## Reminder Status And Troubleshooting
 
-Before enabling:
+Admins open **View reminders** to see scheduled times, destinations, HTML/plain-text previews, per-channel status, configuration blockers and attempt/result timestamps. Opening the list or a preview does not send anything. Member view cannot access it. Previews use current settings rather than archived sent content.
 
-1. Onboard an approved sending domain with Cloudflare Email Service. Review SPF/DKIM/DMARC and bounce records with its owner; do not replace corporate inbound MX records. Verify the account's sending plan/limits and that the team list accepts the sender.
-2. With approval, add this binding to `wrangler.production.json`, restricting its sender too once selected:
-   ```json
-   {
-     "send_email": [
-       {
-         "name": "SHOW_EMAIL",
-         "destination_address": "team@sentry.io",
-         "allowed_sender_addresses": ["APPROVED_SENDER"]
-       }
-     ]
-   }
-   ```
-   Set `SHOW_EMAIL_FROM` to the same onboarded sender. Cloudflare sends to verified destinations for free; arbitrary recipients require Workers Paid. Confirm recipient readiness in the account.
-3. Obtain an approved channel-specific Slack incoming webhook. Store `SHOW_SLACK_WEBHOOK` as a Worker secret, never in Git, a plan file, or Slack conversation. Set the non-secret `SHOW_SLACK_CHANNEL` label (for example `#show-and-tell`) alongside it so the admin reminder list names the destination. Confirm that this label matches the webhook's actual channel; changing the label does not change delivery routing. Without a valid label, the list says the channel is not labeled rather than guessing. Do not reuse Junior's runtime bot credentials.
-4. Test using a separate test Worker/database, a test mailbox, and a test-channel webhook; do not use `team@sentry.io` as a test destination. The production code deliberately fixes that recipient, so use a reviewed test-only configuration/code change in the isolated test environment.
-5. Run verification and approve deployment. Read back the planned events and exact reveal/send times. Enable `SHOW_REMINDERS_ENABLED` in the managed config only after both channels are ready. The same flag pauses reveal and new sends; it cannot revoke requests already in flight.
-6. Confirm the first real reminder in the actual mailbox/list and channel, then check both delivery rows. No scheduled Junior task should send the same reminders. An optional read-only Junior health summary can report pending/failed/uncertain/skipped deliveries.
+- `pending`: awaiting its time or required configuration.
+- `sending`: a worker has claimed the delivery.
+- `sent`: the provider accepted it. Confirm actual receipt when needed; acceptance alone does not prove mailing-list delivery.
+- `failed`: rendering failed before sending, or the provider definitively rejected the request. Correct the cause and confirm a targeted retry.
+- `uncertain`: a timeout, ambiguous provider error or stale in-flight claim. Reconcile provider evidence before retrying because the original may have arrived.
+- `skipped`: outside the catch-up window, past or canceled.
 
-Useful references: [Cloudflare Email Sending](https://developers.cloudflare.com/email-service/get-started/send-emails/), [Workers email API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/), [Cron UTC behavior](https://developers.cloudflare.com/workers/configuration/cron-triggers/), [Slack incoming webhooks](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/).
+Use the CLI list, scoped Worker logs (`show_reminder_delivery` and failure diagnostics), and provider evidence to investigate. Do not expose webhook secrets or raw provider errors in reports.
+
+### Configuration Reference
+
+Read current configuration when investigating a delivery blocker; these are not deployment prerequisites to recheck before every event operation.
+
+- `SHOW_REMINDERS_ENABLED`: controls automatic reveal and new sends. Turning it off does not revoke requests already in flight.
+- `APP_ORIGIN`: HTTPS base URL for submission links.
+- `SHOW_EMAIL` and `SHOW_EMAIL_FROM`: Cloudflare email binding and onboarded sender for the team mailing list.
+- `SHOW_SLACK_WEBHOOK`: secret incoming webhook that determines the Slack destination.
+- `SHOW_SLACK_CHANNEL`: non-secret `#channel` label displayed to admins. Keep it aligned with the actual webhook destination.
+
+Use the approved infrastructure workflow for configuration changes and isolated recipients/channels for delivery tests.
+
+## Editable Email Template
+
+Admins open **View reminders → Edit email template** to change the subject, inbox preview, headline, introduction, submission instructions, newcomer welcome, help contacts and button label. The template is shared across shows.
+
+Select a planned show from the current reminder page and use **Preview draft email** for unsaved copy. **Save email template** applies it to future email runs without sending, retrying or changing recipients. Reload after a concurrent-edit conflict. **Use default copy** loads defaults into the draft; save explicitly to apply them.
+
+Supported placeholders: `{{title}}`, `{{show_times}}`, `{{demo_minutes}}`. The generated start-time block shows the date and DST-correct Los Angeles, New York and Vienna times. There is no submission deadline: participants upload directly and the videos available when the meeting starts are used. The demo limit defaults to five minutes and is editable.
+
+The email includes emoji accents, one submission card/button, a literal submission URL, and a linked newcomer sentence. In **Help and contacts**, separate sections with blank lines; the first line becomes a bold label and the following lines are regular text. Avoid hardcoded relative dates or seasonal timezone abbreviations in reusable copy.
+
+HTML and plain-text delivery use the same renderer as previews. Editable copy is escaped text, not executable HTML. Template revisions record actor and timestamp and prevent stale overwrites. A save does not change a scheduler run already underway, accepted mail, or Slack copy.
+
+## Implementation Map
+
+- `tools/shows.mjs`: event operations and preview/apply workflow.
+- `src/worker/services/show-reminders.ts`: reveal, delivery and status handling.
+- `src/shared/email-template.ts`: template fields, validation and HTML/plain-text rendering.
+- `src/worker/services/email-template.ts`: stored template revisions and compatibility handling.
+- `src/worker/routes/reminders.ts` and `src/worker/routes/email-template.ts`: admin status and template APIs.
+- `src/app/ReminderList.tsx` and `src/app/EmailTemplateEditor.tsx`: admin interface.
