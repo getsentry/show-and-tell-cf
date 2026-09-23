@@ -8,7 +8,12 @@ import type {
   Submission,
 } from '../shared/events';
 import {isJsonObject, isJsonString, type JsonInput} from '../shared/json';
-import {playlistPath, submissionPath, safeReturnTo} from '../shared/playlist';
+import {
+  playlistPath,
+  submissionPath,
+  safeReturnTo,
+  eventIdFromPath,
+} from '../shared/playlist';
 import {api, json} from './api';
 import {AppFrame} from './components/AppFrame';
 import {Avatar} from './components/Avatar';
@@ -44,7 +49,7 @@ export function App() {
     return (
       <PlaylistPage
         key={user.role}
-        eventId={path.slice('/playlists/'.length)}
+        eventId={eventIdFromPath(path)!}
         user={user}
         onViewModeChange={setUser}
       />
@@ -55,9 +60,9 @@ export function App() {
 
 function currentEventId() {
   const path = safeReturnTo(window.location.pathname);
-  if (path.startsWith('/events/')) return path.slice('/events/'.length);
+  if (path.startsWith('/events/')) return eventIdFromPath(path);
   const legacy = new URLSearchParams(window.location.search).get('event');
-  return legacy && safeReturnTo(`/events/${legacy}`) !== '/' ? legacy : null;
+  return legacy && /^[a-zA-Z0-9_-]{1,128}$/.test(legacy) ? legacy : null;
 }
 
 export function defaultPlaylistTitle(now = new Date()) {
@@ -86,6 +91,7 @@ function ShowAndTell({
   const selectedRequests = useRef(new Map<string, number>());
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [creatingSubmission, setCreatingSubmission] = useState(false);
+  const [changingVisibility, setChangingVisibility] = useState(false);
   const eventPending = useRef(false);
   const submissionPending = useRef(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -99,19 +105,22 @@ function ShowAndTell({
     };
   }, []);
 
-  const selectEvent = useCallback((eventId: string | null, push = true) => {
-    if (eventId !== selectedIdRef.current) {
-      setFailedSelection(null);
-      setSelectionError(null);
-    }
-    setDeleteId(null);
-    setMutationError(null);
-    const destination = eventId ? submissionPath(eventId) : '/';
-    if (push && `${window.location.pathname}${window.location.search}` !== destination)
-      window.history.pushState(null, '', destination);
-    selectedIdRef.current = eventId;
-    setSelectedId(eventId);
-  }, []);
+  const selectEvent = useCallback(
+    (eventId: string | null, push = true, slug?: string) => {
+      if (eventId !== selectedIdRef.current) {
+        setFailedSelection(null);
+        setSelectionError(null);
+      }
+      setDeleteId(null);
+      setMutationError(null);
+      const destination = eventId ? submissionPath(eventId, slug) : '/';
+      if (push && `${window.location.pathname}${window.location.search}` !== destination)
+        window.history.pushState(null, '', destination);
+      selectedIdRef.current = eventId;
+      setSelectedId(eventId);
+    },
+    [],
+  );
   const loadEvents = useCallback(async () => {
     const request = ++eventsRequest.current;
     try {
@@ -144,10 +153,16 @@ function ShowAndTell({
       const result = await api<EventResponse>(`/events/${encodeURIComponent(eventId)}`);
       if (
         request !== selectedRequests.current.get(eventId) ||
-        eventId !== selectedIdRef.current
+        eventId !== selectedIdRef.current ||
+        !mounted.current
       )
         return;
       setSelected(result);
+      window.history.replaceState(
+        null,
+        '',
+        submissionPath(result.event.id, result.event.slug),
+      );
     } catch (cause) {
       if (
         request !== selectedRequests.current.get(eventId) ||
@@ -185,6 +200,8 @@ function ShowAndTell({
         json('POST', {
           title: data.get('title'),
           description: data.get('description'),
+          slug: data.get('slug'),
+          hidden: data.get('hidden') === 'on',
         }),
       );
       // A view switch unmounts this editor. A late create must not change the
@@ -194,11 +211,12 @@ function ShowAndTell({
       setShowCreate(false);
       // Keep the new playlist usable even if refreshing the list fails.
       setEvents((current) => [
-        result.event,
+        ...(!result.event.hidden ? [result.event] : []),
         ...current.filter((entry) => entry.id !== result.event.id),
       ]);
       setEventsLoaded(true);
-      if (selectedIdRef.current === previousSelection) selectEvent(result.event.id);
+      if (selectedIdRef.current === previousSelection)
+        selectEvent(result.event.id, true, result.event.slug);
       await loadEvents();
     } finally {
       eventPending.current = false;
@@ -244,6 +262,25 @@ function ShowAndTell({
       json('POST', {hidden}),
     );
     await Promise.all([loadEvents(), requestSelected(selectedId)]);
+  }
+
+  async function changeEventVisibility(event: ShowAndTellEvent) {
+    setChangingVisibility(true);
+    try {
+      const result = await api<{event: ShowAndTellEvent}>(
+        `/events/${event.id}/visibility`,
+        json('POST', {hidden: !event.hidden}),
+      );
+      if (!mounted.current) return;
+      setSelected((current) =>
+        current?.event.id === result.event.id
+          ? {...current, event: result.event}
+          : current,
+      );
+      await loadEvents();
+    } finally {
+      setChangingVisibility(false);
+    }
   }
 
   const visibleSelection = selected?.event.id === selectedId ? selected : null;
@@ -319,6 +356,23 @@ function ShowAndTell({
                       disabled={creatingEvent}
                     />
                   </label>
+                  <label>
+                    URL label (optional)
+                    <input
+                      name="slug"
+                      maxLength={120}
+                      disabled={creatingEvent}
+                      placeholder="october-show-and-tell"
+                    />
+                  </label>
+                  <label className="checkboxLabel">
+                    <input type="checkbox" name="hidden" disabled={creatingEvent} />
+                    Hide from overview
+                  </label>
+                  <p className="formHint">
+                    Hidden playlists still work for anyone with the link and a Sentry
+                    login.
+                  </p>
                   <button
                     className="primaryAction"
                     type="submit"
@@ -342,13 +396,13 @@ function ShowAndTell({
                       </p>
                       <a
                         className="primaryAction primaryAction--play"
-                        href={playlistPath(event.id)}
+                        href={playlistPath(event.id, event.slug)}
                       >
                         Watch playlist
                       </a>
                       <a
                         className="submissionLink"
-                        href={submissionPath(event.id)}
+                        href={submissionPath(event.id, event.slug)}
                         onClick={(click) => {
                           if (
                             click.button !== 0 ||
@@ -359,7 +413,7 @@ function ShowAndTell({
                           )
                             return;
                           click.preventDefault();
-                          selectEvent(event.id);
+                          selectEvent(event.id, true, event.slug);
                         }}
                       >
                         Upload &amp; submissions
@@ -398,7 +452,7 @@ function ShowAndTell({
                   }
                   key={event.id}
                   aria-current={event.id === selectedId ? 'true' : undefined}
-                  onClick={() => selectEvent(event.id)}
+                  onClick={() => selectEvent(event.id, true, event.slug)}
                 >
                   <strong>{event.title}</strong>
                   <span>
@@ -432,7 +486,10 @@ function ShowAndTell({
               <div className="playlistHeroActions">
                 <a
                   className="primaryAction primaryAction--play"
-                  href={playlistPath(visibleSelection.event.id)}
+                  href={playlistPath(
+                    visibleSelection.event.id,
+                    visibleSelection.event.slug,
+                  )}
                 >
                   Open the screening
                 </a>
@@ -440,7 +497,23 @@ function ShowAndTell({
                   kind="submission"
                   key={visibleSelection.event.id}
                   eventId={visibleSelection.event.id}
+                  slug={visibleSelection.event.slug}
                 />
+                {admin ? (
+                  <button
+                    disabled={changingVisibility}
+                    onClick={() =>
+                      reportFailure(changeEventVisibility(visibleSelection.event))
+                    }
+                  >
+                    {visibleSelection.event.hidden
+                      ? 'Show on overview'
+                      : 'Hide from overview'}
+                  </button>
+                ) : null}
+                {visibleSelection.event.hidden ? (
+                  <p className="formHint">Hidden from overview. This link still works.</p>
+                ) : null}
               </div>
             </header>
             {admin && visibleSelection.submissions.length > 1 ? (
@@ -634,9 +707,12 @@ function Loading() {
 
 function SignIn({authError}: {authError: string | null}) {
   const eventId = currentEventId();
-  const returnTo = eventId
-    ? submissionPath(eventId)
-    : safeReturnTo(window.location.pathname);
+  const returnTo =
+    safeReturnTo(window.location.pathname) !== '/'
+      ? safeReturnTo(window.location.pathname)
+      : eventId
+        ? submissionPath(eventId)
+        : '/';
   return (
     <main className="authShell">
       <ThemeToggle className="authThemeToggle" />

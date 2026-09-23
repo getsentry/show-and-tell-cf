@@ -24,7 +24,8 @@
     "GOOGLE_CLIENT_ID": "931381634032-ekdlv1qv93lmhimm8l3l7kknvvd9sitk.apps.googleusercontent.com",
     "ALLOWED_EMAIL_DOMAIN": "sentry.io",
     "VIDEO_PROCESSOR_CONCURRENCY": "1",
-    "VIDEO_PROCESSING_AUTOSTART": "true"
+    "VIDEO_PROCESSING_AUTOSTART": "true",
+    "SHOW_REMINDERS_ENABLED": "false"
   },
   "routes": [
     {"pattern": "showandtell.sentry.new", "custom_domain": true},

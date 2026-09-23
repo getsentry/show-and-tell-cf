@@ -12,6 +12,7 @@ import {playlistRoutes} from './routes/playlists';
 import {sessionRoutes} from './routes/session';
 import {submissionVideoRoutes, videosRoutes} from './routes/videos';
 import {reapExpiredMultipartVideoUploads} from './services/videos';
+import {processShowReminders, type ReminderEnv} from './services/show-reminders';
 
 // Required by the Containers SDK for the processor's scoped R2 outbound handler.
 export {ContainerProxy} from '@cloudflare/containers';
@@ -48,7 +49,14 @@ app.get('/api/admin/session', requireRole('admin'), (c) => c.json({user: c.get('
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 export default {
   fetch: app.fetch,
-  async scheduled(_event: ScheduledController, env: Env) {
-    await reapExpiredMultipartVideoUploads(env.DB, env.VIDEOS);
+  async scheduled(_event: ScheduledController, env: Env & ReminderEnv) {
+    const results = await Promise.allSettled([
+      reapExpiredMultipartVideoUploads(env.DB, env.VIDEOS),
+      processShowReminders(env),
+    ]);
+    if (results.some((result) => result.status === 'rejected'))
+      throw new Error(
+        'Scheduled maintenance or reminders failed; inspect delivery status',
+      );
   },
 };

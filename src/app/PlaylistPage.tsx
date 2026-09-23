@@ -41,7 +41,10 @@ export function PlaylistPage({
       signal: controller.signal,
     })
       .then((result) => {
-        if (!controller.signal.aborted) setData(result);
+        if (!controller.signal.aborted) {
+          setData(result);
+          window.history.replaceState(null, '', playlistPath(eventId, result.event.slug));
+        }
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) setError(errorMessage(cause));
@@ -49,7 +52,7 @@ export function PlaylistPage({
     return () => controller.abort();
   }, [eventId, revision]);
 
-  const backHref = submissionPath(eventId);
+  const backHref = submissionPath(eventId, data?.event.slug);
   return (
     <AppFrame user={user} section="screening" onViewModeChange={onViewModeChange}>
       <main className="watchPage">
@@ -78,7 +81,7 @@ export function PlaylistPage({
                     : ''}
                 </p>
                 <div className="watchButtons">
-                  <SharePlaylist eventId={eventId} />
+                  <SharePlaylist eventId={eventId} slug={data.event.slug} />
                   <button className="textAction" onClick={reload}>
                     Refresh playlist
                   </button>
@@ -447,13 +450,15 @@ function Backdrop() {
 export function SharePlaylist({
   eventId,
   kind = 'playlist',
+  slug,
 }: {
   eventId: string;
+  slug?: string;
   kind?: 'playlist' | 'submission';
 }) {
   const [message, setMessage] = useState('');
   const link = new URL(
-    kind === 'playlist' ? playlistPath(eventId) : submissionPath(eventId),
+    kind === 'playlist' ? playlistPath(eventId, slug) : submissionPath(eventId, slug),
     window.location.origin,
   ).href;
   async function copy() {

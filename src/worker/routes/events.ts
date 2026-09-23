@@ -14,6 +14,7 @@ import type {
 } from '../../shared/events';
 import type {WorkerEnv} from '../index';
 import {requireRole} from '../middleware/user';
+import {eventSlug} from '../../shared/playlist';
 
 export const eventRoutes = new Hono<WorkerEnv>();
 
@@ -26,11 +27,12 @@ eventRoutes.onError((error, c) => {
 
 eventRoutes.get('/', async (c) => {
   const result = await c.env.DB.prepare(
-    `SELECT e.id, e.title, e.description, e.created_at,
+    `SELECT e.id, e.title, e.description, e.created_at, e.slug, e.is_hidden, e.starts_at, e.timezone, e.meeting_url,
       COUNT(s.id) submission_count
      FROM show_and_tell_events e
      LEFT JOIN submissions s ON s.event_id = e.id AND s.deleted_at IS NULL
        AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
+     WHERE e.is_hidden = 0 AND e.cancelled_at IS NULL
      GROUP BY e.id ORDER BY e.created_at DESC`,
   )
     .bind(c.get('user').role, c.get('user').id)
@@ -43,15 +45,41 @@ eventRoutes.post('/', requireRole('admin'), async (c) => {
   const input = parseEvent(await readJson(c.req.raw));
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO show_and_tell_events (id, title, description, created_by)
-     VALUES (?, ?, ?, ?)`,
+    `INSERT INTO show_and_tell_events (id, title, description, created_by, slug, is_hidden)
+     VALUES (?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, input.title, input.description, c.get('user').id)
+    .bind(
+      id,
+      input.title,
+      input.description,
+      c.get('user').id,
+      input.slug,
+      input.hidden ? 1 : 0,
+    )
     .run();
   return c.json(
     {event: await getEvent(c.env.DB, id, c.get('user').role, c.get('user').id)},
     201,
   );
+});
+
+eventRoutes.post('/:eventId/visibility', requireRole('admin'), async (c) => {
+  const hidden = parseVisibility(await readJson(c.req.raw));
+  const result = await c.env.DB.prepare(
+    `UPDATE show_and_tell_events SET is_hidden = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND cancelled_at IS NULL`,
+  )
+    .bind(hidden ? 1 : 0, c.req.param('eventId'))
+    .run();
+  if (!result.meta.changes) return notFound(c);
+  return c.json({
+    event: await getEvent(
+      c.env.DB,
+      c.req.param('eventId'),
+      c.get('user').role,
+      c.get('user').id,
+    ),
+  });
 });
 
 eventRoutes.get('/:eventId', async (c) => {
@@ -125,6 +153,11 @@ eventRoutes.post(
 );
 
 interface EventRow {
+  slug: string;
+  is_hidden: number;
+  starts_at: string | null;
+  timezone: string | null;
+  meeting_url: string | null;
   id: string;
   title: string;
   description: string | null;
@@ -146,7 +179,7 @@ interface SubmissionRow {
 async function getEvent(db: D1Database, id: string, role: string, userId: string) {
   const row = await db
     .prepare(
-      `SELECT e.id, e.title, e.description, e.created_at,
+      `SELECT e.id, e.title, e.description, e.created_at, e.slug, e.is_hidden, e.starts_at, e.timezone, e.meeting_url,
       COUNT(s.id) submission_count
      FROM show_and_tell_events e LEFT JOIN submissions s
        ON s.event_id = e.id AND s.deleted_at IS NULL
@@ -178,6 +211,11 @@ function toEvent(row: EventRow): ShowAndTellEvent {
     description: row.description,
     createdAt: row.created_at,
     submissionCount: row.submission_count,
+    slug: row.slug || eventSlug(row.title),
+    hidden: row.is_hidden === 1,
+    startsAt: row.starts_at,
+    timezone: row.timezone,
+    meetingUrl: row.meeting_url,
   };
 }
 function toSubmission(row: SubmissionRow): Submission {
@@ -203,9 +241,14 @@ async function readJson(request: Request): Promise<JsonInput> {
 }
 function parseEvent(value: JsonInput) {
   if (!isJsonObject(value)) throw new ValidationError('Event must be an object');
+  if (value.hidden !== undefined && !isJsonBoolean(value.hidden))
+    throw new ValidationError('Hidden must be a boolean');
+  const title = requiredText(value.title, 'Title', 120);
   return {
-    title: requiredText(value.title, 'Title', 120),
+    title,
     description: optionalText(value.description, 'Description', 1000),
+    slug: eventSlug(optionalText(value.slug, 'Slug', 120) || title),
+    hidden: value.hidden === true,
   };
 }
 function parseSubmission(value: JsonInput) {

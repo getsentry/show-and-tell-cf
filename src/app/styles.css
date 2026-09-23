@@ -993,6 +993,15 @@ textarea::placeholder {
   border-radius: 0.85rem;
   background: var(--soft);
 }
+.newPlaylist label.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.newPlaylist .checkboxLabel input {
+  width: auto;
+  margin: 0;
+}
 .newPlaylist .kicker {
   margin: 0;
 }

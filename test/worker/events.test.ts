@@ -19,6 +19,72 @@ beforeEach(async () => {
 });
 
 describe('events and submissions', () => {
+  it('hides playlists from every overview but preserves authenticated direct URLs and submissions', async () => {
+    const admin = await userCookie('admin', true);
+    const member = await userCookie('member', false);
+    const created = await request('/api/events', admin.cookie, 'POST', {
+      title: 'Special Show',
+      hidden: true,
+      slug: 'October / special!',
+    });
+    const {event} = await created.json<{
+      event: {id: string; slug: string; hidden: boolean};
+    }>();
+    expect(event).toMatchObject({slug: 'october-special', hidden: true});
+    for (const cookie of [admin.cookie, member.cookie]) {
+      expect(await (await request('/api/events', cookie, 'GET')).json()).toEqual({
+        events: [],
+      });
+      expect((await request(`/api/events/${event.id}`, cookie, 'GET')).status).toBe(200);
+      expect(
+        (await request(`/api/events/${event.id}/playlist`, cookie, 'GET')).status,
+      ).toBe(200);
+    }
+    expect(
+      (
+        await request(`/api/events/${event.id}/submissions`, member.cookie, 'POST', {
+          title: 'Demo',
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await request(`/api/events/${event.id}/visibility`, member.cookie, 'POST', {
+          hidden: false,
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(`/api/events/${event.id}/visibility`, admin.cookie, 'POST', {
+          hidden: false,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      await (await request('/api/events', member.cookie, 'GET')).json(),
+    ).toMatchObject({events: [{id: event.id, hidden: false}]});
+    expect((await request(`/api/events/${event.id}`, '', 'GET')).status).toBe(401);
+  });
+  it('rejects malformed visibility and slugs', async () => {
+    const admin = await userCookie('admin', true);
+    expect(
+      (
+        await request('/api/events', admin.cookie, 'POST', {
+          title: 'Show',
+          hidden: 'false',
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request('/api/events', admin.cookie, 'POST', {
+          title: 'Show',
+          slug: 'x'.repeat(121),
+        })
+      ).status,
+    ).toBe(400);
+  });
   it('includes the current creator avatar on create, detail and visibility responses', async () => {
     const admin = await userCookie('admin', true);
     const eventId = await createEvent(admin.cookie);
