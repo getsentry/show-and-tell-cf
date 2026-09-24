@@ -8,7 +8,12 @@ import type {
   Submission,
 } from '../shared/events';
 import {isJsonObject, isJsonString, type JsonInput} from '../shared/json';
-import {playlistPath, submissionPath, safeReturnTo} from '../shared/playlist';
+import {
+  playlistPath,
+  submissionPath,
+  safeReturnTo,
+  eventIdFromPath,
+} from '../shared/playlist';
 import {api, json} from './api';
 import {AppFrame} from './components/AppFrame';
 import {Avatar} from './components/Avatar';
@@ -17,6 +22,7 @@ import {Loader} from './components/Loader';
 import {SentrySymbol} from './components/SentrySymbol';
 import {ThemeToggle} from './components/ThemeToggle';
 import {PlaylistOrder} from './PlaylistOrder';
+import {ReminderList} from './ReminderList';
 import {PlaylistPage, SharePlaylist} from './PlaylistPage';
 import {VideoPanel} from './VideoPanel';
 
@@ -44,7 +50,7 @@ export function App() {
     return (
       <PlaylistPage
         key={user.role}
-        eventId={path.slice('/playlists/'.length)}
+        eventId={eventIdFromPath(path)!}
         user={user}
         onViewModeChange={setUser}
       />
@@ -55,9 +61,9 @@ export function App() {
 
 function currentEventId() {
   const path = safeReturnTo(window.location.pathname);
-  if (path.startsWith('/events/')) return path.slice('/events/'.length);
+  if (path.startsWith('/events/')) return eventIdFromPath(path);
   const legacy = new URLSearchParams(window.location.search).get('event');
-  return legacy && safeReturnTo(`/events/${legacy}`) !== '/' ? legacy : null;
+  return legacy && /^[a-zA-Z0-9_-]{1,128}$/.test(legacy) ? legacy : null;
 }
 
 export function defaultPlaylistTitle(now = new Date()) {
@@ -76,6 +82,7 @@ function ShowAndTell({
   const [eventsLoaded, setEventsLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(currentEventId);
   const [showCreate, setShowCreate] = useState(false);
+  const [showReminders, setShowReminders] = useState(false);
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
@@ -86,6 +93,7 @@ function ShowAndTell({
   const selectedRequests = useRef(new Map<string, number>());
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [creatingSubmission, setCreatingSubmission] = useState(false);
+  const [changingVisibility, setChangingVisibility] = useState(false);
   const eventPending = useRef(false);
   const submissionPending = useRef(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -99,19 +107,22 @@ function ShowAndTell({
     };
   }, []);
 
-  const selectEvent = useCallback((eventId: string | null, push = true) => {
-    if (eventId !== selectedIdRef.current) {
-      setFailedSelection(null);
-      setSelectionError(null);
-    }
-    setDeleteId(null);
-    setMutationError(null);
-    const destination = eventId ? submissionPath(eventId) : '/';
-    if (push && `${window.location.pathname}${window.location.search}` !== destination)
-      window.history.pushState(null, '', destination);
-    selectedIdRef.current = eventId;
-    setSelectedId(eventId);
-  }, []);
+  const selectEvent = useCallback(
+    (eventId: string | null, push = true, slug?: string) => {
+      if (eventId !== selectedIdRef.current) {
+        setFailedSelection(null);
+        setSelectionError(null);
+      }
+      setDeleteId(null);
+      setMutationError(null);
+      const destination = eventId ? submissionPath(eventId, slug) : '/';
+      if (push && `${window.location.pathname}${window.location.search}` !== destination)
+        window.history.pushState(null, '', destination);
+      selectedIdRef.current = eventId;
+      setSelectedId(eventId);
+    },
+    [],
+  );
   const loadEvents = useCallback(async () => {
     const request = ++eventsRequest.current;
     try {
@@ -144,10 +155,16 @@ function ShowAndTell({
       const result = await api<EventResponse>(`/events/${encodeURIComponent(eventId)}`);
       if (
         request !== selectedRequests.current.get(eventId) ||
-        eventId !== selectedIdRef.current
+        eventId !== selectedIdRef.current ||
+        !mounted.current
       )
         return;
       setSelected(result);
+      window.history.replaceState(
+        null,
+        '',
+        submissionPath(result.event.id, result.event.slug),
+      );
     } catch (cause) {
       if (
         request !== selectedRequests.current.get(eventId) ||
@@ -185,6 +202,8 @@ function ShowAndTell({
         json('POST', {
           title: data.get('title'),
           description: data.get('description'),
+          slug: data.get('slug'),
+          hidden: data.get('hidden') === 'on',
         }),
       );
       // A view switch unmounts this editor. A late create must not change the
@@ -198,7 +217,8 @@ function ShowAndTell({
         ...current.filter((entry) => entry.id !== result.event.id),
       ]);
       setEventsLoaded(true);
-      if (selectedIdRef.current === previousSelection) selectEvent(result.event.id);
+      if (selectedIdRef.current === previousSelection)
+        selectEvent(result.event.id, true, result.event.slug);
       await loadEvents();
     } finally {
       eventPending.current = false;
@@ -246,6 +266,25 @@ function ShowAndTell({
     await Promise.all([loadEvents(), requestSelected(selectedId)]);
   }
 
+  async function changeEventVisibility(event: ShowAndTellEvent) {
+    setChangingVisibility(true);
+    try {
+      const result = await api<{event: ShowAndTellEvent}>(
+        `/events/${event.id}/visibility`,
+        json('POST', {hidden: !event.hidden}),
+      );
+      if (!mounted.current) return;
+      setSelected((current) =>
+        current?.event.id === result.event.id
+          ? {...current, event: result.event}
+          : current,
+      );
+      await loadEvents();
+    } finally {
+      setChangingVisibility(false);
+    }
+  }
+
   const visibleSelection = selected?.event.id === selectedId ? selected : null;
   useEffect(() => {
     if (!createdSubmission) return;
@@ -279,6 +318,19 @@ function ShowAndTell({
                 Show <span>&amp;</span> Tell
               </h1>
             </header>
+            {admin ? (
+              <div className="reminderToggle">
+                <button
+                  className="textAction"
+                  aria-expanded={showReminders}
+                  aria-controls="admin-reminders"
+                  onClick={() => setShowReminders((value) => !value)}
+                >
+                  {showReminders ? 'Close reminders' : 'View reminders'}
+                </button>
+                <div id="admin-reminders">{showReminders ? <ReminderList /> : null}</div>
+              </div>
+            ) : null}
             <section className="overviewSection" aria-label="Show & Tell playlists">
               <div className="overviewHeading">
                 <h2>The shows</h2>
@@ -319,6 +371,23 @@ function ShowAndTell({
                       disabled={creatingEvent}
                     />
                   </label>
+                  <label>
+                    URL label (optional)
+                    <input
+                      name="slug"
+                      maxLength={120}
+                      disabled={creatingEvent}
+                      placeholder="october-show-and-tell"
+                    />
+                  </label>
+                  <label className="checkboxLabel">
+                    <input type="checkbox" name="hidden" disabled={creatingEvent} />
+                    Hide from member overview
+                  </label>
+                  <p className="formHint">
+                    Admins still see hidden playlists. Anyone with the link and a Sentry
+                    login can open them.
+                  </p>
                   <button
                     className="primaryAction"
                     type="submit"
@@ -335,6 +404,9 @@ function ShowAndTell({
                       <h3>{event.title}</h3>
                     </div>
                     <div className="eventCardBody">
+                      {event.hidden ? (
+                        <span className="tag tag--hidden">Hidden</span>
+                      ) : null}
                       {event.description ? <p>{event.description}</p> : null}
                       <p className="eventCount">
                         {event.submissionCount}{' '}
@@ -342,13 +414,13 @@ function ShowAndTell({
                       </p>
                       <a
                         className="primaryAction primaryAction--play"
-                        href={playlistPath(event.id)}
+                        href={playlistPath(event.id, event.slug)}
                       >
                         Watch playlist
                       </a>
                       <a
                         className="submissionLink"
-                        href={submissionPath(event.id)}
+                        href={submissionPath(event.id, event.slug)}
                         onClick={(click) => {
                           if (
                             click.button !== 0 ||
@@ -359,7 +431,7 @@ function ShowAndTell({
                           )
                             return;
                           click.preventDefault();
-                          selectEvent(event.id);
+                          selectEvent(event.id, true, event.slug);
                         }}
                       >
                         Upload &amp; submissions
@@ -398,9 +470,10 @@ function ShowAndTell({
                   }
                   key={event.id}
                   aria-current={event.id === selectedId ? 'true' : undefined}
-                  onClick={() => selectEvent(event.id)}
+                  onClick={() => selectEvent(event.id, true, event.slug)}
                 >
                   <strong>{event.title}</strong>
+                  {event.hidden ? <span className="tag tag--hidden">Hidden</span> : null}
                   <span>
                     {event.submissionCount}{' '}
                     {event.submissionCount === 1 ? 'submission' : 'submissions'}
@@ -432,7 +505,10 @@ function ShowAndTell({
               <div className="playlistHeroActions">
                 <a
                   className="primaryAction primaryAction--play"
-                  href={playlistPath(visibleSelection.event.id)}
+                  href={playlistPath(
+                    visibleSelection.event.id,
+                    visibleSelection.event.slug,
+                  )}
                 >
                   Open the screening
                 </a>
@@ -440,7 +516,30 @@ function ShowAndTell({
                   kind="submission"
                   key={visibleSelection.event.id}
                   eventId={visibleSelection.event.id}
+                  slug={visibleSelection.event.slug}
                 />
+                {admin && !visibleSelection.event.cancelledAt ? (
+                  <button
+                    disabled={changingVisibility}
+                    onClick={() =>
+                      reportFailure(changeEventVisibility(visibleSelection.event))
+                    }
+                  >
+                    {visibleSelection.event.hidden
+                      ? 'Show on member overview'
+                      : 'Hide from member overview'}
+                  </button>
+                ) : null}
+                {visibleSelection.event.cancelledAt ? (
+                  <p className="formHint" role="status">
+                    This show was canceled. Its submissions and links are still available.
+                  </p>
+                ) : visibleSelection.event.hidden ? (
+                  <p className="formHint">
+                    Hidden from the member overview. Admins can still see it, and this
+                    link still works.
+                  </p>
+                ) : null}
               </div>
             </header>
             {admin && visibleSelection.submissions.length > 1 ? (
@@ -634,9 +733,12 @@ function Loading() {
 
 function SignIn({authError}: {authError: string | null}) {
   const eventId = currentEventId();
-  const returnTo = eventId
-    ? submissionPath(eventId)
-    : safeReturnTo(window.location.pathname);
+  const returnTo =
+    safeReturnTo(window.location.pathname) !== '/'
+      ? safeReturnTo(window.location.pathname)
+      : eventId
+        ? submissionPath(eventId)
+        : '/';
   return (
     <main className="authShell">
       <ThemeToggle className="authThemeToggle" />

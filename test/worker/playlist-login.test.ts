@@ -10,7 +10,12 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-it.each(['/playlists/event', '/events/event'])(
+it.each([
+  '/playlists/event',
+  '/events/event',
+  '/events/event/october-show',
+  '/playlists/event/special-show',
+])(
   'returns to %s after verified browser-bound login, ignoring callback returnTo tampering',
   async (returnTo) => {
     const {publicKey, privateKey} = await generateKeyPair('RS256', {extractable: true});

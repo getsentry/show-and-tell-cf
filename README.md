@@ -68,6 +68,10 @@ Like Hack Week, admins can **Switch to user view** / **Back to admin** in the he
 
 **Rollout:** this polish PR adds one backward-compatible D1 column and deploys the Worker/frontend. No new resources or credentials. Production migration/deployment still require explicit approval; local verification does not apply them remotely. The API/plugin/transcript idea in #4 remains deferred.
 
+## Planned Shows And Reminders
+
+See [Planned Shows](PLANNED_SHOWS.md) for the dry-run-first Wrangler operator, plain-English confirmation workflow, hidden playlists, readable links, seven-day reveal/reminders, delivery recovery, and rollout requirements. Migration `0007_planned_shows.sql` is additive. Automatic reveal and real sends stay **disabled** until approved email and Slack configuration is in place.
+
 ## Submissions and video uploads
 
 Playlists and submissions need only a title and optional description. For dated events, use a title such as `Show & Tell — October 2026`. Project links are no longer accepted as a required field or exposed in the API/UI. Migration `0004_remove_project_url.sql` drops the unused `project_url` column and permanently discards its old values. Submission records and video relationships are preserved; no compatibility placeholder remains.

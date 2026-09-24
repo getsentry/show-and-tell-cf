@@ -873,6 +873,74 @@ textarea::placeholder {
 .eventCardBody p {
   margin: 0;
 }
+.eventCardBody > .tag {
+  align-self: flex-start;
+}
+.reminderToggle {
+  margin-bottom: 1.5rem;
+}
+.reminderPanel {
+  margin-top: 1rem;
+  padding: clamp(1rem, 3vw, 2rem);
+  border: 1px solid var(--neutral-border);
+  border-radius: 0.85rem;
+  background: var(--soft);
+}
+.reminderMode {
+  font-weight: 600;
+}
+.reminderList {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+.reminderCard {
+  padding: 1rem;
+  border: 1px solid var(--neutral-border);
+  border-radius: 0.6rem;
+  overflow-wrap: anywhere;
+}
+.reminderHeader,
+.reminderPagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.reminderHeader h3 {
+  margin: 0;
+}
+.reminderMetadata {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+}
+.reminderMetadata dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.reminderMetadata dd {
+  margin: 0.3rem 0 0;
+}
+.reminderBlockers {
+  color: var(--warning-ink);
+  background: var(--warning-bg);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+.reminderBlockers ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+.reminderPreview pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.5;
+}
 .eventCardBody .primaryAction {
   justify-content: center;
   margin-top: auto;
@@ -992,6 +1060,15 @@ textarea::placeholder {
   border: 1px dashed var(--neutral-border);
   border-radius: 0.85rem;
   background: var(--soft);
+}
+.newPlaylist label.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.newPlaylist .checkboxLabel input {
+  width: auto;
+  margin: 0;
 }
 .newPlaylist .kicker {
   margin: 0;
@@ -2263,4 +2340,14 @@ kbd {
   .reelPlaylist {
     grid-template-columns: 1fr;
   }
+}
+
+.emailPreviewFrame {
+  display: block;
+  width: 100%;
+  height: 900px;
+  border: 1px solid #ddd5eb;
+  border-radius: 10px;
+  margin: 16px 0;
+  background: #fff;
 }

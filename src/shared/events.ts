@@ -4,6 +4,12 @@ export interface ShowAndTellEvent {
   description: string | null;
   createdAt: string;
   submissionCount: number;
+  slug?: string;
+  hidden?: boolean;
+  cancelledAt?: string | null;
+  startsAt?: string | null;
+  timezone?: string | null;
+  meetingUrl?: string | null;
 }
 
 export interface Submission {

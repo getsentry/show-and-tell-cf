@@ -6,16 +6,18 @@ import type {PlaylistItem, PlaylistResponse} from '../../shared/playlist';
 import type {WorkerEnv} from '../index';
 import {requireRole} from '../middleware/user';
 import {issuePlayback} from '../services/videos';
+import {eventSlug} from '../../shared/playlist';
 
 export const playlistRoutes = new Hono<WorkerEnv>();
 
 playlistRoutes.get('/:eventId/playlist', async (c) => {
   const event = await c.env.DB.prepare(
-    'SELECT id, title, description FROM show_and_tell_events WHERE id = ?',
+    'SELECT id, title, description, slug FROM show_and_tell_events WHERE id = ?',
   )
     .bind(c.req.param('eventId'))
     .first<PlaylistResponse['event']>();
   if (!event) return c.json({error: {message: 'Playlist not found'}}, 404);
+  event.slug = event.slug || eventSlug(event.title);
   // A screening is identical for every viewer, including admins and uploaders.
   // Playback/content routes independently re-check authentication and visibility.
   const {results} = await c.env.DB.prepare(
