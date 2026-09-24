@@ -81,7 +81,8 @@ export function renderEmail(show: EmailShow, origin: string): EmailPreview {
     participation:
       '👉 Upload your video using the link below. We’ll show the videos that are there when the meeting starts. Please keep demos below 5 mins.',
     button: 'Upload your demo →',
-    help: '👋 Psst, new to Sentry? Learn more about Show & Tell',
+    help: '👋 Psst, new to Sentry? Learn more about',
+    helpLink: 'Show & Tell',
     questions:
       '💬 Questions?\nJump into Slack #discuss-show-n-tell.\n\n🙋 Need a hand?\nAsk @jr or @sergical. We’ll help!',
   };
@@ -102,7 +103,7 @@ export function renderEmail(show: EmailShow, origin: string): EmailPreview {
       meetingUrl = meeting.href;
   }
   const {help, questions} = content;
-  const text = `${content.headline}\n\n${content.intro}\n\n🗓️ Show starts\n${schedule.text}\n\n${content.participation}\n\n${content.button}\n${submissionUrl}\nSentry login required.\n\nInfo & help\n\n${help}\n${learnUrl}\n\n${questions}${meetingUrl ? `\n\n📹 Join the show: ${meetingUrl}` : ''}`;
+  const text = `${content.headline}\n\n${content.intro}\n\n🗓️ Show starts\n${schedule.text}\n\n${content.participation}\n\n${content.button}\n${submissionUrl}\nSentry login required.\n\nInfo & help\n\n${help} ${content.helpLink}\n${learnUrl}\n\n${questions}${meetingUrl ? `\n\n📹 Join the show: ${meetingUrl}` : ''}`;
   const paragraphs = (value: string) =>
     value
       .split(/\n\n+/)
@@ -121,7 +122,7 @@ export function renderEmail(show: EmailShow, origin: string): EmailPreview {
 ${schedule.html}
 ${paragraphs(content.participation)}
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #c9baec;border-radius:12px"><tr><td style="padding:24px;text-align:center"><p style="margin:0 0 8px;font-size:12px;letter-spacing:2px;color:#65527b">🎬 SUBMISSIONS</p><h2 style="margin:0 0 16px;font-size:24px">${escape(show.title)}</h2>${button}<p style="margin:14px 0 0;font-size:12px;color:#65527b">Sentry login required · Under 5 minutes</p><p style="margin:10px 0 0;font-size:12px;overflow-wrap:anywhere;word-break:break-all"><a href="${escape(submissionUrl)}" style="color:#6341cc">${escape(submissionUrl)}</a></p></td></tr></table>
-<div style="margin-top:28px;border-top:1px solid #ddd5eb;padding-top:24px"><h2 style="margin:0 0 18px;font-size:18px">Info &amp; help</h2><p style="margin:0 0 20px;line-height:1.65"><a href="${learnUrl}" style="color:#6341cc">${escape(help)}</a></p>${questions
+<div style="margin-top:28px;border-top:1px solid #ddd5eb;padding-top:24px"><h2 style="margin:0 0 18px;font-size:18px">Info &amp; help</h2><p style="margin:0 0 20px;line-height:1.65">${escape(help)} <a href="${learnUrl}" style="color:#6341cc">${escape(content.helpLink)}</a></p>${questions
     .split(/\n\n+/)
     .map((part) => {
       const [label, ...lines] = part.split('\n');

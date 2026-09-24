@@ -741,10 +741,9 @@ function ShowAndTell({
 function Loading() {
   return (
     <main className="authShell authShell--loading">
-      <section className="authState authState--loading" aria-busy="true">
+      <section className="authState authState--loading" role="status">
         <Loader />
-        <h1>Loading Show &amp; Tell</h1>
-        <p>Checking your session…</p>
+        <h1>Loading</h1>
       </section>
     </main>
   );

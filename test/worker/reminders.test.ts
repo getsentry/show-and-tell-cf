@@ -104,6 +104,10 @@ it('returns exact previews, destinations, due time and status without sending or
     ).text,
   );
   expect(email.html).toContain('Upload your demo');
+  expect(email.html).toContain(
+    '👋 Psst, new to Sentry? Learn more about <a href="https://www.notion.so/sentry/Show-Tell-c607fc1d95064cbfbd3acc7f98689d38" style="color:#6341cc">Show &amp; Tell</a>',
+  );
+  expect(email.message).toContain('👋 Psst, new to Sentry? Learn more about Show & Tell');
   expect(JSON.stringify(body)).not.toContain('SECRET');
   expect(JSON.stringify(body)).not.toContain('sender@example.test');
   expect(send).not.toHaveBeenCalled();

@@ -11,6 +11,23 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('shows only Loading while the session is pending, then clears it', async () => {
+    const session = deferred<Response>();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => session.promise),
+    );
+    render(<App />);
+    expect(screen.getByRole('status')).toHaveTextContent(/^Loading$/);
+    expect(screen.getByRole('heading', {name: 'Loading'})).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Loading Show & Tell|Checking your session/),
+    ).not.toBeInTheDocument();
+    await act(async () => session.resolve(new Response(null, {status: 401})));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', {name: 'Continue with Google'})).toBeInTheDocument();
+  });
+
   it('keeps deletion in a modal and locks retries until the request settles', async () => {
     const pending = deferred<Response>();
     const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
