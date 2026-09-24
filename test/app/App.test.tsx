@@ -3,6 +3,7 @@ import {act, cleanup, fireEvent, render, screen, waitFor} from '@testing-library
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {App, defaultPlaylistTitle} from '../../src/app/App';
+import type {Submission} from '../../src/shared/events';
 
 afterEach(() => {
   cleanup();
@@ -11,6 +12,73 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it.each(['member', 'admin'])(
+    'labels the %s submission list and keeps ordering admin-only',
+    async (role) => {
+      const own = {...submission, creatorAvatarUrl: null, hidden: true};
+      const other = {
+        ...submission,
+        id: 'other',
+        creatorId: 'other-user',
+        title: 'Other demo',
+        creatorAvatarUrl: null,
+      };
+      const submissions = role === 'admin' ? [own, other] : [own];
+      const event = {...october, submissionCount: submissions.length};
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => {
+          if (url === '/api/session') return jsonResponse({user: {...admin, role}});
+          if (url === '/api/events') return jsonResponse({events: [event]});
+          if (url === '/api/events/october')
+            return jsonResponse(detailFor(event, submissions));
+          if (url.endsWith('/video/upload')) return Response.json({upload: null});
+          if (url.endsWith('/video')) return Response.json({video: null});
+          throw new Error(url);
+        }),
+      );
+      render(<App />);
+      expect(
+        await screen.findByText(
+          role === 'admin' ? '2 submissions' : '1 submission from you',
+        ),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('link', {name: 'Upload & submissions'}));
+      const card = await screen.findByRole('article', {name: 'Project demo'});
+      expect(screen.getByText('Hidden from the show')).toBeInTheDocument();
+      expect(await screen.findAllByLabelText(/Choose video/)).toHaveLength(
+        submissions.length,
+      );
+      expect(screen.getAllByRole('button', {name: 'Delete'})).toHaveLength(
+        submissions.length,
+      );
+      expect(screen.getByRole('link', {name: 'Open the screening'})).toHaveAttribute(
+        'href',
+        '/playlists/october',
+      );
+      if (role === 'admin') {
+        expect(screen.getByRole('article', {name: 'Other demo'})).toBeInTheDocument();
+        expect(screen.getByText('Arrange playlist')).toBeInTheDocument();
+        expect(screen.getByText('Lineup')).toBeInTheDocument();
+        expect(card.querySelector('.position')).toHaveTextContent('01');
+      } else {
+        expect(
+          screen.queryByRole('article', {name: 'Other demo'}),
+        ).not.toBeInTheDocument();
+        expect(screen.queryByText('Arrange playlist')).not.toBeInTheDocument();
+        expect(screen.getByText('Your submissions')).toBeInTheDocument();
+        expect(
+          screen.getByText(/Open the screening to watch everyone’s videos/),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/Videos play in this order/)).not.toBeInTheDocument();
+        expect(card.querySelector('.position')).toBeNull();
+        expect(screen.getByRole('button', {name: /October 2026/})).toHaveTextContent(
+          '1 submission from you',
+        );
+      }
+    },
+  );
+
   it.each(['/', '/events/october'])(
     'edits title and description from %s without changing links',
     async (path) => {
@@ -327,6 +395,10 @@ describe('App', () => {
       await screen.findByRole('button', {name: 'Back to admin'}),
     ).toBeInTheDocument();
     expect(screen.queryByRole('heading', {name: 'Project demo'})).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', {name: 'No submissions yet'}),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Your submissions')).toBeInTheDocument();
     expect(window.location.pathname).toBe('/events/october');
     expect(
       await screen.findByRole('form', {name: 'Create submission'}),
@@ -1128,7 +1200,7 @@ const submission = {
   createdAt: '2026-10-01T00:00:00.000Z',
 };
 
-function detailFor(event: typeof october, submissions: (typeof submission)[] = []) {
+function detailFor(event: typeof october, submissions: Submission[] = []) {
   return {event, submissions};
 }
 type TestResponseBody =
