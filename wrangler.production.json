@@ -32,7 +32,11 @@
     {
       "name": "SHOW_EMAIL",
       "allowed_sender_addresses": ["junior@sentry.new"],
-      "allowed_destination_addresses": ["daniel@sentry.io"]
+      "allowed_destination_addresses": [
+        "team@sentry.io",
+        "sergiy.dybskiy@sentry.io",
+        "dgriesser@sentry.io"
+      ]
     }
   ],
   "routes": [

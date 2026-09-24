@@ -746,7 +746,9 @@ function SignIn({authError}: {authError: string | null}) {
         <span className="authMark" aria-hidden="true">
           <SentrySymbol />
         </span>
-        <h1>Show &amp; Tell</h1>
+        <h1>
+          Show <span>&amp;</span> Tell
+        </h1>
         {authError ? (
           <p className="authError" role="alert">
             {authError}
