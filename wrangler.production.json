@@ -25,7 +25,7 @@
     "ALLOWED_EMAIL_DOMAIN": "sentry.io",
     "VIDEO_PROCESSOR_CONCURRENCY": "1",
     "VIDEO_PROCESSING_AUTOSTART": "true",
-    "SHOW_REMINDERS_ENABLED": "false",
+    "SHOW_REMINDERS_ENABLED": "true",
     "SHOW_EMAIL_FROM": {"email": "junior@sentry.new", "name": "Jr."}
   },
   "send_email": [
