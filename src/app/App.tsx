@@ -24,6 +24,7 @@ import {SentrySymbol} from './components/SentrySymbol';
 import {ThemeToggle} from './components/ThemeToggle';
 import {PlaylistOrder} from './PlaylistOrder';
 import {PlaylistTrash} from './PlaylistTrash';
+import {PlaylistEditor} from './PlaylistEditor';
 import {ReminderList} from './ReminderList';
 import {PlaylistPage, SharePlaylist} from './PlaylistPage';
 import {VideoPanel} from './VideoPanel';
@@ -86,10 +87,7 @@ function ShowAndTell({
   const [showCreate, setShowCreate] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
-  const [trashTarget, setTrashTarget] = useState<ShowAndTellEvent | null>(null);
-  const [trashing, setTrashing] = useState(false);
-  const [trashError, setTrashError] = useState<string | null>(null);
-  const trashPending = useRef(false);
+  const [editing, setEditing] = useState<ShowAndTellEvent | null>(null);
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
@@ -124,6 +122,7 @@ function ShowAndTell({
         setSelectionError(null);
       }
       setDeleteId(null);
+      setEditing(null);
       setMutationError(null);
       const destination = eventId ? submissionPath(eventId, slug) : '/';
       if (push && `${window.location.pathname}${window.location.search}` !== destination)
@@ -280,30 +279,32 @@ function ShowAndTell({
     }
   }
 
-  async function trashPlaylist(event: ShowAndTellEvent) {
-    if (trashPending.current) return;
-    trashPending.current = true;
-    setTrashing(true);
-    setTrashError(null);
-    try {
-      await api(`/events/${event.id}/trash`, {method: 'POST'});
-      if (!mounted.current) return;
-      setTrashTarget(null);
-      setEvents((current) => current.filter((entry) => entry.id !== event.id));
-      if (selectedIdRef.current === event.id) {
-        selectEvent(null);
-        setSelected(null);
-      }
-      await loadEvents();
-    } catch (cause) {
-      if (mounted.current)
-        setTrashError(
-          cause instanceof Error ? cause.message : 'Could not move playlist to trash.',
-        );
-    } finally {
-      trashPending.current = false;
-      if (mounted.current) setTrashing(false);
+  function playlistSaved(event: ShowAndTellEvent) {
+    if (!mounted.current) return;
+    setEditing((current) => (current?.id === event.id ? null : current));
+    // Invalidate older detail reads so they cannot overwrite the saved title.
+    selectedRequests.current.set(
+      event.id,
+      (selectedRequests.current.get(event.id) ?? 0) + 1,
+    );
+    setSelected((current) =>
+      current?.event.id === event.id ? {...current, event} : current,
+    );
+    setEvents((current) =>
+      current.map((entry) => (entry.id === event.id ? event : entry)),
+    );
+    void loadEvents();
+  }
+
+  function playlistTrashed(id: string) {
+    if (!mounted.current) return;
+    setEditing((current) => (current?.id === id ? null : current));
+    setEvents((current) => current.filter((entry) => entry.id !== id));
+    if (selectedIdRef.current === id) {
+      selectEvent(null);
+      setSelected(null);
     }
+    void loadEvents();
   }
 
   async function setHidden(submissionId: string, hidden: boolean) {
@@ -349,6 +350,20 @@ function ShowAndTell({
   }, [createdSubmission, selectedId, visibleSelection]);
 
   const errors = [eventsError, selectionError, mutationError].filter(Boolean);
+  if (admin && editing)
+    return (
+      <AppFrame user={user} section="playlists" onViewModeChange={onViewModeChange}>
+        <main className="homePage">
+          <PlaylistEditor
+            key={editing.id}
+            event={editing}
+            onSaved={playlistSaved}
+            onTrashed={playlistTrashed}
+            onCancel={() => setEditing(null)}
+          />
+        </main>
+      </AppFrame>
+    );
   return (
     <AppFrame user={user} section="playlists" onViewModeChange={onViewModeChange}>
       <main className="homePage">
@@ -496,6 +511,9 @@ function ShowAndTell({
                       >
                         Upload &amp; submissions
                       </a>
+                      {admin ? (
+                        <button onClick={() => setEditing(event)}>Edit playlist</button>
+                      ) : null}
                     </div>
                   </article>
                 ))}
@@ -591,14 +609,8 @@ function ShowAndTell({
                   </button>
                 ) : null}
                 {admin ? (
-                  <button
-                    className="dangerAction"
-                    onClick={() => {
-                      setTrashError(null);
-                      setTrashTarget(visibleSelection.event);
-                    }}
-                  >
-                    Move to trash
+                  <button onClick={() => setEditing(visibleSelection.event)}>
+                    Edit playlist
                   </button>
                 ) : null}
                 {visibleSelection.event.cancelledAt ? (
@@ -788,18 +800,6 @@ function ShowAndTell({
             </p>
           </section>
         )}
-        {trashTarget ? (
-          <ConfirmDialog
-            title={`Move “${trashTarget.title}” to trash?`}
-            description="This playlist will leave the overview, and its links and reminders will stop working. Submissions and videos are kept. Admins can restore it from Trash."
-            confirmLabel={trashing ? 'Moving…' : 'Move playlist to trash'}
-            cancelLabel="Keep playlist"
-            busy={trashing}
-            error={trashError}
-            onConfirm={() => void trashPlaylist(trashTarget)}
-            onCancel={() => setTrashTarget(null)}
-          />
-        ) : null}
       </main>
     </AppFrame>
   );

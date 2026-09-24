@@ -19,6 +19,131 @@ beforeEach(async () => {
 });
 
 describe('events and submissions', () => {
+  it('edits metadata while preserving links, visibility, schedule, and submissions', async () => {
+    const admin = await userCookie('admin', true);
+    const id = await createEvent(admin.cookie);
+    await env.DB.prepare(
+      "UPDATE show_and_tell_events SET slug = '', is_hidden = 1, starts_at = '2030-10-01T16:00:00Z' WHERE id = ?",
+    )
+      .bind(id)
+      .run();
+    await request(`/api/events/${id}/submissions`, admin.cookie, 'POST', {title: 'Demo'});
+    const before = await env.DB.prepare('SELECT * FROM submissions WHERE event_id = ?')
+      .bind(id)
+      .all();
+    for (const title of [' First rename ', 'Second rename']) {
+      const response = await request(`/api/events/${id}`, admin.cookie, 'PUT', {
+        title,
+        description: ' New description ',
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        event: {
+          title: title.trim(),
+          description: 'New description',
+          slug: 'event',
+          hidden: true,
+          startsAt: '2030-10-01T16:00:00Z',
+          submissionCount: 1,
+        },
+      });
+    }
+    expect(
+      (
+        await env.DB.prepare('SELECT * FROM submissions WHERE event_id = ?')
+          .bind(id)
+          .all()
+      ).results,
+    ).toEqual(before.results);
+    expect(
+      await (await request(`/api/events/${id}/playlist`, admin.cookie, 'GET')).json(),
+    ).toMatchObject({event: {title: 'Second rename', slug: 'event'}});
+    await request(`/api/events/${id}`, admin.cookie, 'PUT', {
+      title: 'Second rename',
+      description: '',
+    });
+    expect(
+      await (await request(`/api/events/${id}`, admin.cookie, 'GET')).json(),
+    ).toMatchObject({event: {description: null}});
+  });
+
+  it('restricts edits to admins with same-origin requests, including member view', async () => {
+    const admin = await userCookie('admin', true);
+    const member = await userCookie('member', false);
+    const id = await createEvent(admin.cookie);
+    expect(
+      (await request(`/api/events/${id}`, member.cookie, 'PUT', {title: 'No'})).status,
+    ).toBe(403);
+    expect((await request(`/api/events/${id}`, '', 'PUT', {title: 'No'})).status).toBe(
+      401,
+    );
+    expect(
+      (
+        await app.request(
+          `${origin}/api/events/${id}`,
+          {
+            method: 'PUT',
+            headers: {Cookie: admin.cookie, Origin: 'https://evil.test'},
+            body: JSON.stringify({title: 'No'}),
+          },
+          env,
+        )
+      ).status,
+    ).toBe(403);
+    await request('/api/session/view-mode', admin.cookie, 'POST', {mode: 'member'});
+    expect(
+      (await request(`/api/events/${id}`, admin.cookie, 'PUT', {title: 'No'})).status,
+    ).toBe(403);
+  });
+
+  it('validates metadata and rejects editing missing or trashed playlists', async () => {
+    const admin = await userCookie('admin', true);
+    const id = await createEvent(admin.cookie);
+    const invalidBodies: RequestBody[] = [
+      {title: ''},
+      {title: '  '},
+      {title: true},
+      {title: 'x'.repeat(121)},
+      {title: 'ok', description: 'x'.repeat(1001)},
+      {title: 'ok', slug: 'changed'},
+      {title: 'ok', hidden: true},
+    ];
+    for (const body of invalidBodies) {
+      expect((await request(`/api/events/${id}`, admin.cookie, 'PUT', body)).status).toBe(
+        400,
+      );
+    }
+    expect((await request(`/api/events/${id}`, admin.cookie, 'PUT')).status).toBe(400);
+    expect(
+      (await request('/api/events/missing', admin.cookie, 'PUT', {title: 'No'})).status,
+    ).toBe(404);
+    await request(`/api/events/${id}/trash`, admin.cookie, 'POST');
+    expect(
+      (await request(`/api/events/${id}`, admin.cookie, 'PUT', {title: 'No'})).status,
+    ).toBe(404);
+  });
+
+  it.each(['pending', 'sending', 'uncertain', 'sent'])(
+    'handles metadata edits with a %s reminder without requeueing it',
+    async (status) => {
+      const admin = await userCookie('admin', true);
+      const id = await createEvent(admin.cookie);
+      await env.DB.prepare(
+        "INSERT INTO show_reminders (event_id, channel, status) VALUES (?, 'email', ?)",
+      )
+        .bind(id, status)
+        .run();
+      const response = await request(`/api/events/${id}`, admin.cookie, 'PUT', {
+        title: 'Updated',
+      });
+      expect(response.status).toBe(['sending', 'uncertain'].includes(status) ? 409 : 200);
+      expect(
+        await env.DB.prepare('SELECT status FROM show_reminders WHERE event_id = ?')
+          .bind(id)
+          .first(),
+      ).toEqual({status});
+    },
+  );
   it('shows hidden playlists only in admin overviews and preserves authenticated direct URLs and submissions', async () => {
     const admin = await userCookie('admin', true);
     const member = await userCookie('member', false);

@@ -74,6 +74,43 @@ eventRoutes.post('/', requireRole('admin'), async (c) => {
   );
 });
 
+eventRoutes.put('/:eventId', requireRole('admin'), async (c) => {
+  const value = await readJson(c.req.raw);
+  if (
+    !isJsonObject(value) ||
+    Object.keys(value).some((key) => !['title', 'description'].includes(key))
+  )
+    throw new ValidationError('Provide only a title and description');
+  const title = requiredText(value.title, 'Title', 120);
+  const description = optionalText(value.description, 'Description', 1000);
+  const id = c.req.param('eventId');
+  const user = c.get('user');
+  const event = await getEvent(c.env.DB, id, user.role, user.id);
+  if (!event) return notFound(c);
+  const result = await c.env.DB.prepare(
+    `UPDATE show_and_tell_events SET title = ?, description = ?,
+       slug = CASE WHEN slug = '' THEN ? ELSE slug END, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND trashed_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM show_reminders
+         WHERE event_id = ? AND status IN ('sending', 'uncertain'))`,
+  )
+    .bind(title, description, event.slug, id, id)
+    .run();
+  if (!result.meta.changes) {
+    if (!(await getEvent(c.env.DB, id, user.role, user.id))) return notFound(c);
+    return c.json(
+      {
+        error: {
+          message:
+            'A reminder is being sent or needs reconciliation. Resolve its delivery status before editing this playlist.',
+        },
+      },
+      409,
+    );
+  }
+  return c.json({event: await getEvent(c.env.DB, id, user.role, user.id)});
+});
+
 // Do not touch submission deletion flags: their triggers retire uploaded videos.
 eventRoutes.post('/:eventId/trash', requireRole('admin'), async (c) => {
   const id = c.req.param('eventId');

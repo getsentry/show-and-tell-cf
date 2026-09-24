@@ -11,6 +11,71 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it.each(['/', '/events/october'])(
+    'edits title and description from %s without changing links',
+    async (path) => {
+      let saved = false;
+      const updated = {
+        ...october,
+        title: 'Updated show',
+        description: 'Updated description',
+      };
+      const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === '/api/session') return jsonResponse({user: admin});
+        if (url === '/api/events')
+          return Response.json({events: [saved ? updated : october]});
+        if (url === '/api/events/october') {
+          if (init?.method === 'PUT') {
+            saved = true;
+            return Response.json({event: updated});
+          }
+          return Response.json({event: saved ? updated : october, submissions: []});
+        }
+        throw new Error(url);
+      });
+      vi.stubGlobal('fetch', fetcher);
+      window.history.replaceState(null, '', path);
+      render(<App />);
+      fireEvent.click(await screen.findByRole('button', {name: 'Edit playlist'}));
+      expect(screen.getByRole('textbox', {name: 'Playlist title'})).toHaveValue(
+        october.title,
+      );
+      fireEvent.change(screen.getByRole('textbox', {name: 'Playlist title'}), {
+        target: {value: 'Discard me'},
+      });
+      fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+      expect(fetcher.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+      fireEvent.click(screen.getByRole('button', {name: 'Edit playlist'}));
+      expect(screen.getByRole('textbox', {name: 'Playlist title'})).toHaveValue(
+        october.title,
+      );
+      fireEvent.change(screen.getByRole('textbox', {name: 'Playlist title'}), {
+        target: {value: 'Updated show'},
+      });
+      fireEvent.change(
+        screen.getByRole('textbox', {name: 'Playlist description (optional)'}),
+        {target: {value: 'Updated description'}},
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Save changes'}));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('form', {name: 'Edit playlist'}),
+        ).not.toBeInTheDocument(),
+      );
+      expect(screen.getByRole('heading', {name: 'Updated show'})).toBeInTheDocument();
+      expect(screen.getByText('Updated description')).toBeInTheDocument();
+      expect(window.location.pathname).toBe(path);
+      expect(
+        fetcher.mock.calls.find(([, init]) => init?.method === 'PUT')?.[1]?.body,
+      ).toBe(JSON.stringify({title: 'Updated show', description: 'Updated description'}));
+      expect(
+        screen.getByRole('link', {
+          name: path === '/' ? 'Watch playlist' : 'Open the screening',
+        }),
+      ).toHaveAttribute('href', '/playlists/october');
+    },
+  );
+
   it('confirms playlist trash, preserves the page on failure, and restores from the overview', async () => {
     let trashed = false;
     let fail = true;
@@ -35,7 +100,8 @@ describe('App', () => {
     vi.stubGlobal('fetch', fetcher);
     window.history.replaceState(null, '', '/events/october');
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', {name: 'Move to trash'}));
+    fireEvent.click(await screen.findByRole('button', {name: 'Edit playlist'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Move to trash'}));
     expect(screen.getByRole('dialog')).toHaveTextContent(
       'Submissions and videos are kept',
     );
@@ -79,6 +145,7 @@ describe('App', () => {
     expect(screen.queryByRole('button', {name: 'Move to trash'})).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', {name: '← All shows'}));
     expect(screen.queryByRole('button', {name: 'View trash'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Edit playlist'})).not.toBeInTheDocument();
   });
   it('shows only Loading while the session is pending, then clears it', async () => {
     const session = deferred<Response>();
