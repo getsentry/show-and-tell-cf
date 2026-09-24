@@ -54,7 +54,9 @@ function request(
     {
       ...env,
       SHOW_EMAIL: configured ? {send} : undefined,
-      SHOW_EMAIL_FROM: configured ? 'sender@example.test' : undefined,
+      SHOW_EMAIL_FROM: configured
+        ? {email: 'sender@example.test', name: 'Jr.'}
+        : undefined,
       SHOW_REMINDERS_ENABLED: 'false',
     },
   );
@@ -76,7 +78,7 @@ it('sends the static email only to the authenticated admin, even with scheduling
   expect(send).toHaveBeenCalledExactlyOnceWith({
     ...email,
     subject: `[TEST] ${email.subject}`,
-    from: 'sender@example.test',
+    from: {email: 'sender@example.test', name: 'Jr.'},
     to: 'tester@sentry.io',
   });
   expect(
