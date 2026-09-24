@@ -1,19 +1,13 @@
 import type {ReactNode} from 'react';
 
-/** Hack Week's bouncing tiles, in Sentry colours. */
+/** A rotating reel around a stationary play symbol; decorative, not a control. */
 export function Loader() {
   return (
-    <div className="tileLoader" aria-hidden="true">
-      <div className="tileLoaderTiles">
-        <span />
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
-      <div className="tileLoaderTrack">
-        <span />
-      </div>
+    <div className="reelLoader" aria-hidden="true">
+      <span className="reelLoaderRing" />
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path d="M8 5v14l11-7Z" fill="currentColor" />
+      </svg>
     </div>
   );
 }

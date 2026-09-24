@@ -370,75 +370,28 @@ textarea::placeholder {
   background: var(--yellow);
 }
 
-/* Loader: Hack Week's bouncing tiles. */
-.tileLoader {
+/* Loader: a quiet screening reel with a fixed footprint. */
+.reelLoader {
   position: relative;
-  width: min(13rem, 72vw);
-  margin: 0 auto clamp(1.5rem, 5vw, 2.5rem);
+  display: grid;
+  width: 4rem;
+  height: 4rem;
+  margin: 0 auto 1.5rem;
+  place-items: center;
+  color: var(--blurple);
 }
-.tileLoaderTiles {
-  display: flex;
-  height: 3.4rem;
-  gap: 0.42rem;
-  align-items: flex-end;
-  justify-content: center;
-}
-.tileLoaderTiles span {
-  --loader-color: var(--blurple);
-  --loader-tilt: -3deg;
-  display: block;
-  width: clamp(1.35rem, 5vw, 1.8rem);
-  height: clamp(1.75rem, 6vw, 2.3rem);
-  border: 2px solid rgba(var(--shadow-ink), 0.12);
-  border-radius: 0.4rem;
-  background: var(--loader-color);
-  box-shadow: 0 0.3rem 0 rgba(var(--shadow-ink), 0.1);
-  animation: loadingTile 1.35s cubic-bezier(0.45, 0, 0.2, 1) infinite both;
-}
-.tileLoaderTiles span:nth-child(1) {
-  --loader-color: var(--dark-blurple);
-  --loader-tilt: -7deg;
-  animation-delay: -1.08s;
-}
-.tileLoaderTiles span:nth-child(2) {
-  --loader-color: var(--pink);
-  --loader-tilt: 3deg;
-  animation-delay: -0.81s;
-}
-.tileLoaderTiles span:nth-child(3) {
-  --loader-color: var(--green);
-  --loader-tilt: -2deg;
-  animation-delay: -0.54s;
-}
-.tileLoaderTiles span:nth-child(4) {
-  --loader-color: var(--yellow);
-  --loader-tilt: 6deg;
-  animation-delay: -0.27s;
-}
-.tileLoaderTiles span:nth-child(5) {
-  --loader-tilt: -4deg;
-}
-.tileLoaderTrack {
-  position: relative;
-  overflow: hidden;
-  height: 0.22rem;
-  margin-top: 0.7rem;
-  border-radius: 999px;
-  background: var(--lavender);
-}
-.tileLoaderTrack span {
+.reelLoaderRing {
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--pink) 28%,
-    var(--blurple) 50%,
-    var(--green) 72%,
-    transparent 100%
-  );
-  animation: loadingTrack 1.8s ease-in-out infinite;
+  border: 3px solid var(--line);
+  border-top-color: var(--blurple);
+  border-right-color: var(--blurple);
+  border-radius: 50%;
+  animation: reelTurn 1.4s linear infinite;
+}
+.reelLoader svg {
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 /* Frame: masthead and footer. */
@@ -771,6 +724,20 @@ textarea::placeholder {
   border-color: transparent;
   background: transparent;
 }
+.authState--loading {
+  animation: none;
+}
+.authState--loading::after {
+  content: none;
+}
+.authState--loading h1 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
 .pageState {
   margin: 1rem auto;
   border: 0;
@@ -1000,20 +967,28 @@ textarea::placeholder {
 }
 .playlistsBar {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
   gap: 1.25rem;
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
 }
-.playlistsBar--admin {
-  grid-template-columns: minmax(0, 1fr) minmax(16rem, 19rem);
-  align-items: start;
+.playlistsBar .backLink {
+  margin: 0;
+  white-space: nowrap;
 }
 .playlistPills {
   display: flex;
-  flex-wrap: wrap;
   gap: 0.5rem;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0.25rem;
+  scrollbar-width: thin;
 }
 .playlistPill {
   display: grid;
+  flex: 0 0 auto;
+  max-width: 20rem;
+  align-content: start;
   gap: 0.15rem;
   padding: 0.6rem 0.95rem;
   color: var(--ink);
@@ -1097,10 +1072,9 @@ textarea::placeholder {
 }
 .playlistHero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 18rem;
   gap: 2rem;
-  align-items: end;
-  animation: rise 0.35s ease-out both;
+  align-items: start;
 }
 .playlistHero h1,
 .watchHeader h1 {
@@ -1123,8 +1097,12 @@ textarea::placeholder {
 }
 .playlistHeroActions {
   display: grid;
+  min-width: 0;
   gap: 0.75rem;
-  justify-items: end;
+}
+.playlistHeroActions > *,
+.playlistHeroActions .sharePlaylist {
+  width: 100%;
 }
 .playlistHeroActions .primaryAction {
   min-height: 3rem;
@@ -1133,15 +1111,17 @@ textarea::placeholder {
   box-shadow: 0 10px 25px rgba(117, 83, 255, 0.28);
 }
 .sharePlaylist {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-  align-items: center;
-  justify-content: flex-end;
+  display: grid;
+  width: 18rem;
+  max-width: 100%;
+  min-width: 0;
+  gap: 0.5rem;
 }
 .sharePlaylist [role='status'] {
+  min-height: 2.5em;
   color: var(--muted);
   font-size: 0.76rem;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 .playlistOrder {
@@ -1227,7 +1207,7 @@ textarea::placeholder {
   font-size: 1.5rem;
   letter-spacing: -0.03em;
 }
-.lineupHeader p {
+.lineupHeader > p {
   margin: 0;
   color: var(--muted);
   font-size: 0.8rem;
@@ -1255,9 +1235,6 @@ textarea::placeholder {
   border-style: dashed;
   border-color: var(--neutral-border);
   background: var(--soft);
-}
-.submissionCard:has(.confirmAction) {
-  grid-template-columns: 2.75rem minmax(0, 1fr);
 }
 .position {
   color: var(--blurple);
@@ -1305,32 +1282,56 @@ textarea::placeholder {
   gap: 0.5rem;
   align-items: stretch;
 }
-.cardActions:has(.confirmAction) {
-  grid-column: 2;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-start;
+.confirmDialog {
+  width: min(30rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 1.5rem;
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  border-radius: 1rem;
+  background: var(--surface-raised);
+  box-shadow: 0 1rem 4rem rgba(var(--shadow-ink), 0.25);
+  overflow-wrap: anywhere;
 }
-.cardActions > .confirmAction {
-  flex: 1 1 100%;
+.confirmDialog::backdrop {
+  background: rgba(19, 15, 28, 0.65);
 }
-.confirmAction {
+.confirmDialog h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.3;
+}
+.confirmDialog p {
+  margin: 0.75rem 0 1.5rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.confirmDialog p.inlineError {
+  color: var(--danger-ink);
+}
+.confirmDialogActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.9rem 1rem;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+.confirmDialogActions button {
+  min-height: 2.75rem;
+}
+.dangerAction {
+  padding: 0.6rem 0.85rem;
   color: var(--danger-ink);
+  font-size: 0.85rem;
+  font-weight: 600;
   border: 1px solid var(--danger-border);
-  border-radius: 0.75rem;
+  border-radius: 0.55rem;
   background: var(--danger-bg);
 }
-.confirmAction p {
-  flex: 1 1 100%;
-  margin: 0 0 0.25rem;
-  font-size: 0.85rem;
-  font-weight: 500;
-  line-height: 1.5;
+.dangerAction:hover:not(:disabled) {
+  border-color: var(--danger);
+}
+.dangerAction:active:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 15%, var(--danger-bg));
 }
 .emptyState {
   padding: clamp(2rem, 7vw, 5rem);
@@ -2138,33 +2139,9 @@ kbd {
     transform: translateY(0) scale(1);
   }
 }
-@keyframes loadingTile {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: translateY(0) rotate(var(--loader-tilt)) scale(0.9);
-  }
-  38% {
-    opacity: 1;
-    transform: translateY(-0.72rem) rotate(var(--loader-tilt)) scale(1);
-  }
-  68% {
-    opacity: 0.72;
-    transform: translateY(0) rotate(var(--loader-tilt)) scale(0.94);
-  }
-}
-@keyframes loadingTrack {
-  0% {
-    opacity: 0;
-    transform: translateX(-100%);
-  }
-  25%,
-  70% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(100%);
+@keyframes reelTurn {
+  to {
+    transform: rotate(360deg);
   }
 }
 @keyframes drift {
@@ -2192,8 +2169,9 @@ kbd {
 }
 @media (prefers-reduced-motion: reduce) {
   .stageBackdrop span,
-  .tileLoaderTiles span,
-  .tileLoaderTrack span {
+  .reelLoaderRing,
+  .authState--loading,
+  .pageState--loading {
     animation: none;
   }
   .clipOverlay {
@@ -2214,20 +2192,18 @@ kbd {
   .identityCopy {
     display: none;
   }
-  .playlistsBar--admin {
-    grid-template-columns: 1fr;
-  }
   .playlistHero,
   .watchHeader {
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;
   }
-  .playlistHeroActions,
+  .playlistHeroActions {
+    width: min(100%, 24rem);
+  }
   .watchActions {
     justify-items: start;
   }
-  .sharePlaylist,
   .watchButtons {
     justify-content: flex-start;
   }
@@ -2240,7 +2216,7 @@ kbd {
     flex-direction: column;
     gap: 0.35rem;
   }
-  .lineupHeader p {
+  .lineupHeader > p {
     text-align: left;
   }
   .submissionCard {
@@ -2265,6 +2241,16 @@ kbd {
   }
 }
 @media (max-width: 560px) {
+  .playlistsBar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+  .playlistPill {
+    max-width: 16rem;
+  }
+  .confirmDialogActions {
+    flex-direction: column;
+  }
   .eventCard {
     grid-template-columns: minmax(0, 1fr);
   }

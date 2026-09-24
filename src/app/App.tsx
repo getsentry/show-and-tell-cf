@@ -17,6 +17,7 @@ import {
 import {api, json} from './api';
 import {AppFrame} from './components/AppFrame';
 import {Avatar} from './components/Avatar';
+import {ConfirmDialog} from './components/ConfirmDialog';
 import {GoogleIcon} from './components/GoogleIcon';
 import {Loader} from './components/Loader';
 import {SentrySymbol} from './components/SentrySymbol';
@@ -97,6 +98,9 @@ function ShowAndTell({
   const eventPending = useRef(false);
   const submissionPending = useRef(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deletingSubmission, setDeletingSubmission] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deletionPending = useRef(false);
   const [createdSubmission, setCreatedSubmission] = useState<Submission | null>(null);
   const admin = user.role === 'admin';
   const mounted = useRef(true);
@@ -251,10 +255,22 @@ function ShowAndTell({
   }
 
   async function removeSubmission(submissionId: string) {
-    if (!selectedId) return;
-    await api(`/events/${selectedId}/submissions/${submissionId}`, {method: 'DELETE'});
-    setDeleteId(null);
-    await Promise.all([loadEvents(), requestSelected(selectedId)]);
+    if (!selectedId || deletionPending.current) return;
+    deletionPending.current = true;
+    setDeletingSubmission(true);
+    setDeleteError(null);
+    try {
+      await api(`/events/${selectedId}/submissions/${submissionId}`, {method: 'DELETE'});
+      setDeleteId(null);
+      await Promise.all([loadEvents(), requestSelected(selectedId)]);
+    } catch (cause) {
+      setDeleteError(
+        cause instanceof Error ? cause.message : 'Could not delete submission.',
+      );
+    } finally {
+      deletionPending.current = false;
+      setDeletingSubmission(false);
+    }
   }
 
   async function setHidden(submissionId: string, hidden: boolean) {
@@ -462,7 +478,7 @@ function ShowAndTell({
             >
               ← All shows
             </a>
-            <div className="playlistPills">
+            <div className="playlistPills" role="group" aria-label="Switch playlist">
               {events.map((event) => (
                 <button
                   className={
@@ -662,25 +678,28 @@ function ShowAndTell({
                               </button>
                             ) : null}
                             {canManage ? (
-                              deleteId === submission.id ? (
-                                <div className="confirmAction">
-                                  <p>Delete this submission and its video?</p>
-                                  <button
-                                    onClick={() =>
-                                      reportFailure(removeSubmission(submission.id))
-                                    }
-                                  >
-                                    Confirm delete
-                                  </button>
-                                  <button onClick={() => setDeleteId(null)}>
-                                    Keep submission
-                                  </button>
-                                </div>
-                              ) : (
-                                <button onClick={() => setDeleteId(submission.id)}>
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setDeleteError(null);
+                                    setDeleteId(submission.id);
+                                  }}
+                                >
                                   Delete
                                 </button>
-                              )
+                                {deleteId === submission.id ? (
+                                  <ConfirmDialog
+                                    title="Delete this submission and its video?"
+                                    description={`“${submission.title}” will be removed from the show. This cannot be undone.`}
+                                    confirmLabel="Confirm delete"
+                                    cancelLabel="Keep submission"
+                                    busy={deletingSubmission}
+                                    error={deleteError}
+                                    onConfirm={() => void removeSubmission(submission.id)}
+                                    onCancel={() => setDeleteId(null)}
+                                  />
+                                ) : null}
+                              </>
                             ) : null}
                           </div>
                         ) : null}
@@ -722,10 +741,9 @@ function ShowAndTell({
 function Loading() {
   return (
     <main className="authShell authShell--loading">
-      <section className="authState authState--loading" aria-busy="true">
+      <section className="authState authState--loading" role="status">
         <Loader />
-        <h1>Loading Show &amp; Tell</h1>
-        <p>Checking your session…</p>
+        <h1>Loading</h1>
       </section>
     </main>
   );
