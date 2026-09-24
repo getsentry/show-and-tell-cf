@@ -362,6 +362,39 @@ describe('App', () => {
     expect(screen.queryByRole('form', {name: 'Create playlist'})).not.toBeInTheDocument();
   });
 
+  it('keeps unsaved edits open when an earlier playlist create finishes', async () => {
+    const pending = deferred<Response>();
+    let created = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === '/api/session') return jsonResponse({user: admin});
+        if (url === '/api/events') {
+          if (init?.method === 'POST') return pending.promise;
+          return jsonResponse({events: created ? [november, october] : [october]});
+        }
+        throw new Error(url);
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'New playlist'}));
+    fireEvent.submit(screen.getByRole('form', {name: 'Create playlist'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Edit playlist'}));
+    fireEvent.change(screen.getByRole('textbox', {name: 'Playlist title'}), {
+      target: {value: 'Unsaved title'},
+    });
+    created = true;
+    await act(async () => pending.resolve(jsonResponse({event: november})));
+    expect(screen.getByRole('form', {name: 'Edit playlist'})).toBeInTheDocument();
+    expect(screen.getByRole('textbox', {name: 'Playlist title'})).toHaveValue(
+      'Unsaved title',
+    );
+    expect(window.location.pathname).toBe('/');
+    fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+    expect(screen.getByRole('article', {name: november.title})).toBeInTheDocument();
+    expect(screen.getByRole('article', {name: october.title})).toBeInTheDocument();
+  });
+
   it('never exposes admin controls to a member on the overview', async () => {
     vi.stubGlobal(
       'fetch',

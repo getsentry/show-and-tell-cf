@@ -94,6 +94,7 @@ function ShowAndTell({
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [failedSelection, setFailedSelection] = useState<string | null>(null);
   const selectedIdRef = useRef<string | null>(selectedId);
+  const navigationRevision = useRef(0);
   const eventsRequest = useRef(0);
   const selectedRequests = useRef(new Map<string, number>());
   const [creatingEvent, setCreatingEvent] = useState(false);
@@ -117,6 +118,7 @@ function ShowAndTell({
 
   const selectEvent = useCallback(
     (eventId: string | null, push = true, slug?: string) => {
+      navigationRevision.current++;
       if (eventId !== selectedIdRef.current) {
         setFailedSelection(null);
         setSelectionError(null);
@@ -205,7 +207,7 @@ function ShowAndTell({
     if (eventPending.current) return;
     eventPending.current = true;
     setCreatingEvent(true);
-    const previousSelection = selectedIdRef.current;
+    const previousNavigation = navigationRevision.current;
     try {
       const result = await api<{event: ShowAndTellEvent}>(
         '/events',
@@ -227,7 +229,7 @@ function ShowAndTell({
         ...current.filter((entry) => entry.id !== result.event.id),
       ]);
       setEventsLoaded(true);
-      if (selectedIdRef.current === previousSelection)
+      if (navigationRevision.current === previousNavigation)
         selectEvent(result.event.id, true, result.event.slug);
       await loadEvents();
     } finally {
@@ -277,6 +279,12 @@ function ShowAndTell({
       deletionPending.current = false;
       setDeletingSubmission(false);
     }
+  }
+
+  function editPlaylist(event: ShowAndTellEvent) {
+    // Opening the editor is navigation even when the selected playlist stays the same.
+    navigationRevision.current++;
+    setEditing(event);
   }
 
   function playlistSaved(event: ShowAndTellEvent) {
@@ -512,7 +520,7 @@ function ShowAndTell({
                         Upload &amp; submissions
                       </a>
                       {admin ? (
-                        <button onClick={() => setEditing(event)}>Edit playlist</button>
+                        <button onClick={() => editPlaylist(event)}>Edit playlist</button>
                       ) : null}
                     </div>
                   </article>
@@ -609,7 +617,7 @@ function ShowAndTell({
                   </button>
                 ) : null}
                 {admin ? (
-                  <button onClick={() => setEditing(visibleSelection.event)}>
+                  <button onClick={() => editPlaylist(visibleSelection.event)}>
                     Edit playlist
                   </button>
                 ) : null}
