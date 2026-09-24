@@ -23,6 +23,7 @@ import {Loader} from './components/Loader';
 import {SentrySymbol} from './components/SentrySymbol';
 import {ThemeToggle} from './components/ThemeToggle';
 import {PlaylistOrder} from './PlaylistOrder';
+import {PlaylistTrash} from './PlaylistTrash';
 import {ReminderList} from './ReminderList';
 import {PlaylistPage, SharePlaylist} from './PlaylistPage';
 import {VideoPanel} from './VideoPanel';
@@ -84,6 +85,11 @@ function ShowAndTell({
   const [selectedId, setSelectedId] = useState<string | null>(currentEventId);
   const [showCreate, setShowCreate] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashTarget, setTrashTarget] = useState<ShowAndTellEvent | null>(null);
+  const [trashing, setTrashing] = useState(false);
+  const [trashError, setTrashError] = useState<string | null>(null);
+  const trashPending = useRef(false);
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
@@ -128,15 +134,16 @@ function ShowAndTell({
     [],
   );
   const loadEvents = useCallback(async () => {
+    if (!mounted.current) return;
     const request = ++eventsRequest.current;
     try {
       const result = await api<EventsResponse>('/events');
-      if (request !== eventsRequest.current) return;
+      if (request !== eventsRequest.current || !mounted.current) return;
       setEvents(result.events);
       setEventsLoaded(true);
       setEventsError(null);
     } catch (cause) {
-      if (request !== eventsRequest.current) return;
+      if (request !== eventsRequest.current || !mounted.current) return;
       setEventsError(cause instanceof Error ? cause.message : 'Request failed');
     }
   }, []);
@@ -273,6 +280,32 @@ function ShowAndTell({
     }
   }
 
+  async function trashPlaylist(event: ShowAndTellEvent) {
+    if (trashPending.current) return;
+    trashPending.current = true;
+    setTrashing(true);
+    setTrashError(null);
+    try {
+      await api(`/events/${event.id}/trash`, {method: 'POST'});
+      if (!mounted.current) return;
+      setTrashTarget(null);
+      setEvents((current) => current.filter((entry) => entry.id !== event.id));
+      if (selectedIdRef.current === event.id) {
+        selectEvent(null);
+        setSelected(null);
+      }
+      await loadEvents();
+    } catch (cause) {
+      if (mounted.current)
+        setTrashError(
+          cause instanceof Error ? cause.message : 'Could not move playlist to trash.',
+        );
+    } finally {
+      trashPending.current = false;
+      if (mounted.current) setTrashing(false);
+    }
+  }
+
   async function setHidden(submissionId: string, hidden: boolean) {
     if (!selectedId) return;
     await api(
@@ -345,6 +378,17 @@ function ShowAndTell({
                   {showReminders ? 'Close reminders' : 'View reminders'}
                 </button>
                 <div id="admin-reminders">{showReminders ? <ReminderList /> : null}</div>
+                <button
+                  className="textAction"
+                  aria-expanded={showTrash}
+                  aria-controls="playlist-trash"
+                  onClick={() => setShowTrash((value) => !value)}
+                >
+                  {showTrash ? 'Close trash' : 'View trash'}
+                </button>
+                <div id="playlist-trash">
+                  {showTrash ? <PlaylistTrash onRestored={loadEvents} /> : null}
+                </div>
               </div>
             ) : null}
             <section className="overviewSection" aria-label="Show & Tell playlists">
@@ -546,6 +590,17 @@ function ShowAndTell({
                       : 'Hide from member overview'}
                   </button>
                 ) : null}
+                {admin ? (
+                  <button
+                    className="dangerAction"
+                    onClick={() => {
+                      setTrashError(null);
+                      setTrashTarget(visibleSelection.event);
+                    }}
+                  >
+                    Move to trash
+                  </button>
+                ) : null}
                 {visibleSelection.event.cancelledAt ? (
                   <p className="formHint" role="status">
                     This show was canceled. Its submissions and links are still available.
@@ -733,6 +788,18 @@ function ShowAndTell({
             </p>
           </section>
         )}
+        {trashTarget ? (
+          <ConfirmDialog
+            title={`Move “${trashTarget.title}” to trash?`}
+            description="This playlist will leave the overview, and its links and reminders will stop working. Submissions and videos are kept. Admins can restore it from Trash."
+            confirmLabel={trashing ? 'Moving…' : 'Move playlist to trash'}
+            cancelLabel="Keep playlist"
+            busy={trashing}
+            error={trashError}
+            onConfirm={() => void trashPlaylist(trashTarget)}
+            onCancel={() => setTrashTarget(null)}
+          />
+        ) : null}
       </main>
     </AppFrame>
   );

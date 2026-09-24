@@ -68,7 +68,7 @@ function request(
   body?: {title?: string; expectedIds?: string[]; ids?: string[]},
 ) {
   return app.request(
-    `${origin}/api/events/${path}`,
+    `${origin}/api/events${path && !path.startsWith('?') ? '/' : ''}${path}`,
     {
       method,
       headers: {Cookie: cookie, Origin: origin, 'Content-Type': 'application/json'},
@@ -86,6 +86,149 @@ async function ids() {
 }
 
 describe('playlist playback and ordering', () => {
+  it('restricts trash and restore to admins, including member view and same-origin checks', async () => {
+    for (const action of ['trash', 'restore']) {
+      expect((await request(`event/${action}`, member, 'POST')).status).toBe(403);
+      expect((await request(`event/${action}`, '', 'POST')).status).toBe(401);
+      expect(
+        (
+          await app.request(
+            `${origin}/api/events/event/${action}`,
+            {
+              method: 'POST',
+              headers: {Cookie: admin, Origin: 'https://evil.test'},
+            },
+            env,
+          )
+        ).status,
+      ).toBe(403);
+    }
+    expect((await request('?trash=true', member)).status).toBe(403);
+    await app.request(
+      `${origin}/api/session/view-mode`,
+      {
+        method: 'POST',
+        headers: {Cookie: admin, Origin: origin, 'Content-Type': 'application/json'},
+        body: JSON.stringify({mode: 'member'}),
+      },
+      env,
+    );
+    expect((await request('event/trash', admin, 'POST')).status).toBe(403);
+    expect((await request('event/restore', admin, 'POST')).status).toBe(403);
+    expect((await request('?trash=true', admin)).status).toBe(403);
+  });
+
+  it('trashes and restores populated playlists without changing submissions, uploads, or objects', async () => {
+    await env.VIDEOS.put('source-a', 'original');
+    await env.VIDEOS.put('output-a', 'processed');
+    await env.DB.prepare(
+      "UPDATE show_and_tell_events SET is_hidden = 1, slug = 'saved-slug' WHERE id = 'event'",
+    ).run();
+    await env.DB.prepare(
+      "UPDATE submissions SET playlist_position = 9, is_hidden = 1 WHERE id = 'c'",
+    ).run();
+    const before = await Promise.all(
+      ['submissions', 'video_uploads', 'video_submissions'].map(
+        async (table) =>
+          (await env.DB.prepare(`SELECT * FROM ${table} ORDER BY id`).all()).results,
+      ),
+    );
+    expect((await request('event/trash', admin, 'POST')).status).toBe(204);
+    for (const cookie of [admin, member]) {
+      expect(await (await request('', cookie)).json()).toMatchObject({
+        events: [{id: 'other'}],
+      });
+      for (const path of ['event', 'event/playlist', 'event/playlist/video-a/playback'])
+        expect((await request(path, cookie)).status).toBe(404);
+      expect(
+        (await request('event/submissions', cookie, 'POST', {title: 'No'})).status,
+      ).toBe(404);
+      expect((await request('event/submissions/a', cookie, 'DELETE')).status).toBe(404);
+      for (const path of [
+        'submissions/a/video',
+        'submissions/a/video/upload',
+        'videos/video-a/playback',
+        'videos/video-a/content',
+      ])
+        expect(
+          (await app.request(`${origin}/api/${path}`, {headers: {Cookie: cookie}}, env))
+            .status,
+        ).toBe(404);
+      expect(
+        (
+          await app.request(
+            `${origin}/api/submissions/a/video/upload`,
+            {
+              method: 'POST',
+              headers: {
+                Cookie: cookie,
+                Origin: origin,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                fileName: 'new.mp4',
+                fileSize: 10,
+                contentType: 'video/mp4',
+              }),
+            },
+            env,
+          )
+        ).status,
+      ).toBe(404);
+    }
+    expect((await order(['a', 'b', 'c'], ['c', 'b', 'a'])).status).toBe(404);
+    expect(await (await request('?trash=true')).json()).toMatchObject({
+      events: [{id: 'event', submissionCount: 3}],
+    });
+    expect((await request('event/trash', admin, 'POST')).status).toBe(404);
+    expect((await request('missing/restore', admin, 'POST')).status).toBe(404);
+    expect((await request('event/restore', admin, 'POST')).status).toBe(204);
+    expect((await request('event/restore', admin, 'POST')).status).toBe(404);
+    expect(await (await request('?trash=true')).json()).toEqual({events: []});
+    expect(await (await request('event')).json()).toMatchObject({
+      event: {hidden: true, slug: 'saved-slug', submissionCount: 3},
+    });
+    expect(await ids()).toEqual(['c', 'a', 'b']);
+    expect((await request('event/playlist/video-a/playback', member)).status).toBe(200);
+    expect(
+      await Promise.all(
+        ['submissions', 'video_uploads', 'video_submissions'].map(
+          async (table) =>
+            (await env.DB.prepare(`SELECT * FROM ${table} ORDER BY id`).all()).results,
+        ),
+      ),
+    ).toEqual(before);
+    expect(await (await env.VIDEOS.get('source-a'))?.text()).toBe('original');
+    expect(await (await env.VIDEOS.get('output-a'))?.text()).toBe('processed');
+  });
+
+  it.each(['sending', 'uncertain'])(
+    'blocks trash during %s reminder delivery',
+    async (status) => {
+      await env.DB.prepare(
+        "INSERT INTO show_reminders (event_id, channel, status) VALUES ('event', 'email', ?)",
+      )
+        .bind(status)
+        .run();
+      expect((await request('event/trash', admin, 'POST')).status).toBe(409);
+      expect((await request('event')).status).toBe(200);
+    },
+  );
+
+  it('restores empty canceled playlists without uncanceling them', async () => {
+    await env.DB.prepare(
+      "UPDATE show_and_tell_events SET cancelled_at = CURRENT_TIMESTAMP WHERE id = 'other'",
+    ).run();
+    expect((await request('other/trash', admin, 'POST')).status).toBe(204);
+    expect(await (await request('?trash=true')).json()).toMatchObject({
+      events: [{id: 'other', submissionCount: 0}],
+    });
+    expect((await request('other/restore', admin, 'POST')).status).toBe(204);
+    expect(await (await request('other')).json()).toMatchObject({
+      event: {cancelledAt: expect.any(String)},
+    });
+    expect(await (await request('')).json()).toMatchObject({events: [{id: 'event'}]});
+  });
   it('requires authentication and restricts ordering to admins with same-origin requests', async () => {
     expect((await request('event/playlist', '')).status).toBe(401);
     expect((await order(['a', 'b', 'c'], ['c', 'b', 'a'], member)).status).toBe(403);

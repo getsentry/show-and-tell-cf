@@ -11,6 +11,75 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('confirms playlist trash, preserves the page on failure, and restores from the overview', async () => {
+    let trashed = false;
+    let fail = true;
+    const pending = deferred<Response>();
+    const fetcher = vi.fn(async (url: string) => {
+      if (url === '/api/session') return jsonResponse({user: admin});
+      if (url === '/api/events') return jsonResponse({events: trashed ? [] : [october]});
+      if (url === '/api/events?trash=true')
+        return jsonResponse({events: trashed ? [october] : []});
+      if (url === '/api/events/october') return jsonResponse(detailFor(october));
+      if (url === '/api/events/october/trash') {
+        if (fail) return pending.promise;
+        trashed = true;
+        return new Response(null, {status: 204});
+      }
+      if (url === '/api/events/october/restore') {
+        trashed = false;
+        return new Response(null, {status: 204});
+      }
+      throw new Error(url);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    window.history.replaceState(null, '', '/events/october');
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Move to trash'}));
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'Submissions and videos are kept',
+    );
+    expect(screen.getByRole('button', {name: 'Keep playlist'})).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', {name: 'Keep playlist'}));
+    expect(fetcher.mock.calls.some(([url]) => url.endsWith('/trash'))).toBe(false);
+    fireEvent.click(screen.getByRole('button', {name: 'Move to trash'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Move playlist to trash'}));
+    expect(screen.getByRole('button', {name: 'Moving…'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Keep playlist'})).toBeDisabled();
+    await act(async () =>
+      pending.resolve(Response.json({error: {message: 'Try again'}}, {status: 503})),
+    );
+    expect(screen.getByRole('dialog')).toHaveTextContent('Try again');
+    expect(window.location.pathname).toBe('/events/october');
+    fail = false;
+    fireEvent.click(screen.getByRole('button', {name: 'Move playlist to trash'}));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('article', {name: october.title})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'View trash'}));
+    fireEvent.click(await screen.findByRole('button', {name: 'Restore playlist'}));
+    expect(await screen.findByText('Trash is empty.')).toBeInTheDocument();
+    expect(await screen.findByRole('article', {name: october.title})).toBeInTheDocument();
+  });
+
+  it('does not expose playlist trash controls to members', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/session')
+          return jsonResponse({user: {...admin, role: 'member', actualRole: 'member'}});
+        if (url === '/api/events') return jsonResponse({events: [october]});
+        if (url === '/api/events/october') return jsonResponse(detailFor(october));
+        throw new Error(url);
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole('link', {name: 'Upload & submissions'}));
+    await screen.findByRole('form', {name: 'Create submission'});
+    expect(screen.queryByRole('button', {name: 'Move to trash'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', {name: '← All shows'}));
+    expect(screen.queryByRole('button', {name: 'View trash'})).not.toBeInTheDocument();
+  });
   it('shows only Loading while the session is pending, then clears it', async () => {
     const session = deferred<Response>();
     vi.stubGlobal(

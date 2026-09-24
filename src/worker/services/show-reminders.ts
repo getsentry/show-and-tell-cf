@@ -35,17 +35,17 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
     ),
     env.DB.prepare(`UPDATE show_reminders SET status = 'skipped'
       WHERE channel = 'email' AND status = 'pending' AND event_id IN (
-        SELECT id FROM show_and_tell_events WHERE cancelled_at IS NOT NULL OR starts_at <= ? OR reminder_at < ?
+        SELECT id FROM show_and_tell_events WHERE trashed_at IS NULL AND (cancelled_at IS NOT NULL OR starts_at <= ? OR reminder_at < ?)
       )`).bind(timestamp, stale),
     env.DB.prepare(`UPDATE show_and_tell_events SET is_hidden = 0, revealed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-      WHERE cancelled_at IS NULL AND reminder_at <= ? AND starts_at > ? AND revealed_at IS NULL`).bind(
+      WHERE cancelled_at IS NULL AND trashed_at IS NULL AND reminder_at <= ? AND starts_at > ? AND revealed_at IS NULL`).bind(
       timestamp,
       timestamp,
     ),
   ]);
   const {results} = await env.DB.prepare(`SELECT DISTINCT e.id FROM show_and_tell_events e
     JOIN show_reminders r ON r.event_id = e.id
-    WHERE e.cancelled_at IS NULL AND e.reminder_at <= ? AND e.reminder_at >= ? AND e.starts_at > ?
+    WHERE e.cancelled_at IS NULL AND e.trashed_at IS NULL AND e.reminder_at <= ? AND e.reminder_at >= ? AND e.starts_at > ?
       AND r.channel = 'email' AND r.status = 'pending' ORDER BY e.reminder_at LIMIT 20`)
     .bind(timestamp, stale, timestamp)
     .all<{id: string}>();
@@ -55,7 +55,7 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
     const claimed =
       await env.DB.prepare(`UPDATE show_reminders SET status = 'sending', attempted_at = ?
         WHERE event_id = ? AND channel = ? AND status = 'pending'
-        AND EXISTS (SELECT 1 FROM show_and_tell_events WHERE id = ? AND cancelled_at IS NULL
+        AND EXISTS (SELECT 1 FROM show_and_tell_events WHERE id = ? AND cancelled_at IS NULL AND trashed_at IS NULL
           AND reminder_at <= ? AND reminder_at >= ? AND starts_at > ?)
         RETURNING event_id`)
         .bind(timestamp, id, channel, id, timestamp, stale, timestamp)
