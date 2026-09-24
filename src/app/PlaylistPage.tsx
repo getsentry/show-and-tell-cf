@@ -82,9 +82,6 @@ export function PlaylistPage({
                 </p>
                 <div className="watchButtons">
                   <SharePlaylist eventId={eventId} slug={data.event.slug} />
-                  <button className="textAction" onClick={reload}>
-                    Refresh playlist
-                  </button>
                 </div>
               </div>
             </header>
@@ -95,8 +92,8 @@ export function PlaylistPage({
                 <span>∅</span>
                 <h2>No videos are ready</h2>
                 <p>
-                  Hidden, deleted and unfinished videos stay out of the playlist. Refresh
-                  once uploads finish processing.
+                  Hidden, deleted and unfinished videos stay out of the screening. Refresh
+                  your browser once uploads finish processing.
                 </p>
               </section>
             )}
@@ -216,7 +213,7 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
   const next = () => void controller.current?.next();
 
   return (
-    <section className="screening" aria-label="Playlist player">
+    <section className="screening" aria-label="Screening player">
       <div
         ref={shell}
         className={`screeningShell${idle && state.phase === 'playing' ? ' idle' : ''}`}
@@ -237,7 +234,7 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
                   : 'screeningClip'
               }
               aria-hidden={!showingVideo || activeSlot !== slot}
-              aria-label={`Playlist video ${slot + 1}`}
+              aria-label={`Screening video ${slot + 1}`}
             />
           ))}
           {showingVideo ? (
@@ -472,7 +469,7 @@ export function SharePlaylist({
   return (
     <div className="sharePlaylist">
       <button className="textAction" onClick={() => void copy()}>
-        {kind === 'playlist' ? 'Copy playlist link' : 'Copy submission link'}
+        {kind === 'playlist' ? 'Copy screening link' : 'Copy submission link'}
       </button>
       <span role="status">{message}</span>
     </div>

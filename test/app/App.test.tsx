@@ -70,7 +70,7 @@ describe('App', () => {
       ).toBe(JSON.stringify({title: 'Updated show', description: 'Updated description'}));
       expect(
         screen.getByRole('link', {
-          name: path === '/' ? 'Watch playlist' : 'Open the screening',
+          name: 'Open the screening',
         }),
       ).toHaveAttribute('href', '/playlists/october');
     },
@@ -218,7 +218,7 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', {name: 'Show & Tell', level: 1}),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole('link', {name: 'Watch playlist'})[0]).toHaveAttribute(
+    expect(screen.getAllByRole('link', {name: 'Open the screening'})[0]).toHaveAttribute(
       'href',
       '/playlists/october',
     );
