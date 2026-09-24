@@ -499,7 +499,7 @@ function ShowAndTell({
                         className="primaryAction primaryAction--play"
                         href={playlistPath(event.id, event.slug)}
                       >
-                        Watch playlist
+                        Open the screening
                       </a>
                       <a
                         className="submissionLink"

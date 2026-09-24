@@ -76,6 +76,9 @@ describe('playlist page', () => {
     expect(
       screen.queryByRole('form', {name: 'Create submission'}),
     ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: /Refresh/i})).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Copy screening link'})).toBeInTheDocument();
+    expect(screen.getByRole('region', {name: 'Screening player'})).toBeInTheDocument();
     expect(play).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', {name: 'Play all'}));
     // Every clip is announced on a title card first; the countdown can be skipped.
@@ -158,6 +161,10 @@ describe('playlist page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('500');
     fireEvent.click(screen.getByRole('button', {name: 'Retry loading'}));
     expect(await screen.findByText(/No videos are ready/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Refresh your browser once uploads finish processing/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: /Refresh/i})).not.toBeInTheDocument();
     expect(screen.queryByRole('button', {name: 'Play all'})).not.toBeInTheDocument();
   });
   it('reports unavailable fullscreen and provides a clipboard fallback', async () => {
@@ -172,7 +179,7 @@ describe('playlist page', () => {
     );
     cleanup();
     render(<SharePlaylist eventId="event" />);
-    fireEvent.click(screen.getByRole('button', {name: 'Copy playlist link'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Copy screening link'}));
     expect(await screen.findByRole('status')).toHaveTextContent('/playlists/event');
   });
 });
