@@ -11,6 +11,44 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('keeps deletion in a modal and locks retries until the request settles', async () => {
+    const pending = deferred<Response>();
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/session') return jsonResponse({user: admin});
+      if (url === '/api/events') return jsonResponse({events: [october]});
+      if (url === '/api/events/october')
+        return jsonResponse(detailFor(october, [submission]));
+      if (url.endsWith('/video/upload')) return Response.json({upload: null});
+      if (url.endsWith('/video')) return Response.json({video: null});
+      if (init?.method === 'DELETE') return pending.promise;
+      throw new Error(url);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    window.history.replaceState(null, '', '/events/october');
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Delete'}));
+    expect(screen.getByRole('dialog')).toHaveAccessibleName(
+      'Delete this submission and its video?',
+    );
+    expect(screen.getByRole('button', {name: 'Keep submission'})).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', {name: 'Keep submission'}));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetcher.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+    fireEvent.click(screen.getByRole('button', {name: 'Delete'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Confirm delete'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Confirm delete'}));
+    expect(screen.getByRole('button', {name: 'Keep submission'})).toBeDisabled();
+    expect(
+      fetcher.mock.calls.filter(([, init]) => init?.method === 'DELETE'),
+    ).toHaveLength(1);
+    await act(async () =>
+      pending.resolve(Response.json({error: {message: 'Try again'}}, {status: 503})),
+    );
+    expect(screen.getByRole('dialog')).toContainElement(screen.getByRole('alert'));
+    expect(screen.getByRole('alert')).toHaveTextContent('Try again');
+    expect(screen.getByRole('button', {name: 'Confirm delete'})).toBeEnabled();
+  });
+
   it('defaults new titles to the current local month and year', () => {
     expect(defaultPlaylistTitle(new Date(2026, 8, 22))).toBe(
       'Show & Tell September - 2026',

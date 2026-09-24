@@ -10,6 +10,7 @@ import type {
   VideoUploadSession,
 } from '../shared/videos';
 import {api, errorMessage, json} from './api';
+import {ConfirmDialog} from './components/ConfirmDialog';
 import {
   checkRememberedFile,
   forgetFile,
@@ -279,7 +280,7 @@ export function VideoPanel({
           </button>
         </div>
       ) : null}
-      {actionError ? (
+      {actionError && !confirmRemove ? (
         <div className="inlineError" role="alert">
           {actionError}
         </div>
@@ -388,36 +389,36 @@ export function VideoPanel({
                     : 'Restart queued processing'}
                 </button>
               ) : null}
+              <button
+                disabled={busy}
+                onClick={() => {
+                  setActionError(null);
+                  setConfirmRemove(true);
+                }}
+              >
+                Remove video
+              </button>
               {confirmRemove ? (
-                <div className="confirmAction">
-                  <p>
-                    Remove this video? Processing will stop and playback will be
-                    unavailable. The submission stays saved.
-                  </p>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      void perform('updating', async (signal) => {
-                        await api(base, {...json('DELETE', {confirmed: true}), signal});
-                        if (mounted.current) {
-                          setSource(null);
-                          setConfirmRemove(false);
-                          setFile(null);
-                        }
-                      })
-                    }
-                  >
-                    Confirm remove video
-                  </button>
-                  <button disabled={busy} onClick={() => setConfirmRemove(false)}>
-                    Keep video
-                  </button>
-                </div>
-              ) : (
-                <button disabled={busy} onClick={() => setConfirmRemove(true)}>
-                  Remove video
-                </button>
-              )}
+                <ConfirmDialog
+                  title="Remove this video?"
+                  description="Processing will stop and playback will be unavailable. The submission stays saved."
+                  confirmLabel="Confirm remove video"
+                  cancelLabel="Keep video"
+                  busy={busy}
+                  error={actionError}
+                  onCancel={() => setConfirmRemove(false)}
+                  onConfirm={() =>
+                    void perform('updating', async (signal) => {
+                      await api(base, {...json('DELETE', {confirmed: true}), signal});
+                      if (mounted.current) {
+                        setSource(null);
+                        setConfirmRemove(false);
+                        setFile(null);
+                      }
+                    })
+                  }
+                />
+              ) : null}
             </div>
           ) : null}
         </>
