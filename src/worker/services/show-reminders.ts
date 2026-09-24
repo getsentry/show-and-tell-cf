@@ -4,7 +4,7 @@ export interface ReminderEnv {
   DB: D1Database;
   APP_ORIGIN?: string;
   SHOW_REMINDERS_ENABLED?: string;
-  SHOW_EMAIL_FROM?: string;
+  SHOW_EMAIL_FROM?: string | {email: string; name: string};
   SHOW_EMAIL?: SendEmail;
 }
 export function reminderOrigin(value?: string) {

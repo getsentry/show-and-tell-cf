@@ -25,8 +25,16 @@
     "ALLOWED_EMAIL_DOMAIN": "sentry.io",
     "VIDEO_PROCESSOR_CONCURRENCY": "1",
     "VIDEO_PROCESSING_AUTOSTART": "true",
-    "SHOW_REMINDERS_ENABLED": "false"
+    "SHOW_REMINDERS_ENABLED": "false",
+    "SHOW_EMAIL_FROM": {"email": "junior@sentry.new", "name": "Jr."}
   },
+  "send_email": [
+    {
+      "name": "SHOW_EMAIL",
+      "allowed_sender_addresses": ["junior@sentry.new"],
+      "allowed_destination_addresses": ["daniel@sentry.io"]
+    }
+  ],
   "routes": [
     {"pattern": "showandtell.sentry.new", "custom_domain": true},
     {"pattern": "showntell.sentry.new", "custom_domain": true}

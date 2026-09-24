@@ -92,7 +92,9 @@ Read current configuration when investigating a delivery blocker; these are not 
 
 - `SHOW_REMINDERS_ENABLED`: controls automatic reveal and new sends. Turning it off does not revoke requests already in flight.
 - `APP_ORIGIN`: HTTPS base URL for submission links.
-- `SHOW_EMAIL` and `SHOW_EMAIL_FROM`: Cloudflare email binding and onboarded sender for the team mailing list.
+- `SHOW_EMAIL` and `SHOW_EMAIL_FROM`: Cloudflare email binding and onboarded sender. `SHOW_EMAIL_FROM` accepts an address string or a JSON object with `email` and display `name`.
+
+The production configuration uses **Jr. <junior@sentry.new>**, with the binding temporarily restricted to `daniel@sentry.io` for testing. Other admins' personal tests and `team@sentry.io` are blocked by that allowlist. Automatic reminders remain disabled; expand the approved recipient list before enabling them.
 
 Use the approved infrastructure workflow for configuration changes. Keep the team list protected from external posting: a Sentry From address alone does not establish Workspace-internal delivery. IT should approve the sender/relay or an authenticated forwarding route. A successful personal test does not prove the team list will accept that sender.
 
