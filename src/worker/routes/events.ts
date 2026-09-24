@@ -26,16 +26,27 @@ eventRoutes.onError((error, c) => {
 });
 
 eventRoutes.get('/', async (c) => {
+  const trash = c.req.query('trash') === 'true';
+  if (trash && c.get('user').role !== 'admin')
+    return c.json({error: {message: 'Admin access required'}}, 403);
   const result = await c.env.DB.prepare(
     `SELECT e.id, e.title, e.description, e.created_at, e.slug, e.is_hidden, e.starts_at, e.timezone, e.meeting_url, e.cancelled_at,
       COUNT(s.id) submission_count
      FROM show_and_tell_events e
      LEFT JOIN submissions s ON s.event_id = e.id AND s.deleted_at IS NULL
        AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
-     WHERE (e.is_hidden = 0 OR ? = 'admin') AND e.cancelled_at IS NULL
+     WHERE (e.is_hidden = 0 OR ? = 'admin')
+       AND ((? = 1 AND e.trashed_at IS NOT NULL)
+         OR (? = 0 AND e.trashed_at IS NULL AND e.cancelled_at IS NULL))
      GROUP BY e.id ORDER BY e.created_at DESC`,
   )
-    .bind(c.get('user').role, c.get('user').id, c.get('user').role)
+    .bind(
+      c.get('user').role,
+      c.get('user').id,
+      c.get('user').role,
+      trash ? 1 : 0,
+      trash ? 1 : 0,
+    )
     .all<EventRow>();
   const response: EventsResponse = {events: result.results.map(toEvent)};
   return c.json(response);
@@ -63,11 +74,90 @@ eventRoutes.post('/', requireRole('admin'), async (c) => {
   );
 });
 
+eventRoutes.put('/:eventId', requireRole('admin'), async (c) => {
+  const value = await readJson(c.req.raw);
+  if (
+    !isJsonObject(value) ||
+    Object.keys(value).some((key) => !['title', 'description'].includes(key))
+  )
+    throw new ValidationError('Provide only a title and description');
+  const title = requiredText(value.title, 'Title', 120);
+  const description = optionalText(value.description, 'Description', 1000);
+  const id = c.req.param('eventId');
+  const user = c.get('user');
+  const event = await getEvent(c.env.DB, id, user.role, user.id);
+  if (!event) return notFound(c);
+  const result = await c.env.DB.prepare(
+    `UPDATE show_and_tell_events SET title = ?, description = ?,
+       slug = CASE WHEN slug = '' THEN ? ELSE slug END, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND trashed_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM show_reminders
+         WHERE event_id = ? AND status IN ('sending', 'uncertain'))`,
+  )
+    .bind(title, description, event.slug, id, id)
+    .run();
+  if (!result.meta.changes) {
+    if (!(await getEvent(c.env.DB, id, user.role, user.id))) return notFound(c);
+    return c.json(
+      {
+        error: {
+          message:
+            'A reminder is being sent or needs reconciliation. Resolve its delivery status before editing this playlist.',
+        },
+      },
+      409,
+    );
+  }
+  return c.json({event: await getEvent(c.env.DB, id, user.role, user.id)});
+});
+
+// Do not touch submission deletion flags: their triggers retire uploaded videos.
+eventRoutes.post('/:eventId/trash', requireRole('admin'), async (c) => {
+  const id = c.req.param('eventId');
+  const result = await c.env.DB.prepare(
+    `UPDATE show_and_tell_events SET trashed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND trashed_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM show_reminders
+         WHERE event_id = ? AND status IN ('sending', 'uncertain'))`,
+  )
+    .bind(id, id)
+    .run();
+  if (!result.meta.changes) {
+    const event = await c.env.DB.prepare(
+      'SELECT id FROM show_and_tell_events WHERE id = ? AND trashed_at IS NULL',
+    )
+      .bind(id)
+      .first();
+    if (!event) return notFound(c);
+    return c.json(
+      {
+        error: {
+          message:
+            'A reminder is being sent or needs reconciliation. Resolve its delivery status before moving this playlist to trash.',
+        },
+      },
+      409,
+    );
+  }
+  return c.body(null, 204);
+});
+
+eventRoutes.post('/:eventId/restore', requireRole('admin'), async (c) => {
+  const result = await c.env.DB.prepare(
+    `UPDATE show_and_tell_events SET trashed_at = NULL, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND trashed_at IS NOT NULL`,
+  )
+    .bind(c.req.param('eventId'))
+    .run();
+  if (!result.meta.changes) return notFound(c);
+  return c.body(null, 204);
+});
+
 eventRoutes.post('/:eventId/visibility', requireRole('admin'), async (c) => {
   const hidden = parseVisibility(await readJson(c.req.raw));
   const result = await c.env.DB.prepare(
     `UPDATE show_and_tell_events SET is_hidden = ?, updated_at = CURRENT_TIMESTAMP
-     WHERE id = ? AND cancelled_at IS NULL`,
+     WHERE id = ? AND cancelled_at IS NULL AND trashed_at IS NULL`,
   )
     .bind(hidden ? 1 : 0, c.req.param('eventId'))
     .run();
@@ -125,7 +215,8 @@ eventRoutes.delete('/:eventId/submissions/:submissionId', async (c) => {
   const result = await c.env.DB.prepare(
     `UPDATE submissions SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
      WHERE id = ? AND event_id = ? AND deleted_at IS NULL
-       AND (creator_id = ? OR ? = 'admin')`,
+       AND (creator_id = ? OR ? = 'admin')
+       AND EXISTS (SELECT 1 FROM show_and_tell_events e WHERE e.id = submissions.event_id AND e.trashed_at IS NULL)`,
   )
     .bind(c.req.param('submissionId'), c.req.param('eventId'), user.id, user.role)
     .run();
@@ -141,7 +232,8 @@ eventRoutes.post(
     const hidden = parseVisibility(await readJson(c.req.raw));
     const result = await c.env.DB.prepare(
       `UPDATE submissions SET is_hidden = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND event_id = ? AND deleted_at IS NULL`,
+       WHERE id = ? AND event_id = ? AND deleted_at IS NULL
+         AND EXISTS (SELECT 1 FROM show_and_tell_events e WHERE e.id = submissions.event_id AND e.trashed_at IS NULL)`,
     )
       .bind(hidden ? 1 : 0, c.req.param('submissionId'), c.req.param('eventId'))
       .run();
@@ -185,7 +277,7 @@ async function getEvent(db: D1Database, id: string, role: string, userId: string
      FROM show_and_tell_events e LEFT JOIN submissions s
        ON s.event_id = e.id AND s.deleted_at IS NULL
          AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
-     WHERE e.id = ? GROUP BY e.id`,
+     WHERE e.id = ? AND e.trashed_at IS NULL GROUP BY e.id`,
     )
     .bind(role, userId, id)
     .first<EventRow>();

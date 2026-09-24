@@ -77,6 +77,41 @@ it.each([
     expect(slack).not.toHaveBeenCalled();
   },
 );
+it('pauses reminders and automatic reveal in trash and resumes eligible reminders after restore', async () => {
+  await seed();
+  await env.DB.prepare(
+    "UPDATE show_and_tell_events SET trashed_at = CURRENT_TIMESTAMP WHERE id = 'show'",
+  ).run();
+  await processShowReminders(config(), now);
+  expect(send).not.toHaveBeenCalled();
+  expect(await statuses()).toEqual([{channel: 'email', status: 'pending'}]);
+  expect(
+    await env.DB.prepare(
+      "SELECT is_hidden, revealed_at FROM show_and_tell_events WHERE id = 'show'",
+    ).first(),
+  ).toEqual({is_hidden: 1, revealed_at: null});
+  await env.DB.prepare(
+    "UPDATE show_and_tell_events SET trashed_at = NULL WHERE id = 'show'",
+  ).run();
+  await processShowReminders(config(), now);
+  expect(send).toHaveBeenCalledTimes(1);
+});
+
+it('does not send expired reminders after restoration', async () => {
+  await seed('show', '2030-09-28T16:00:00.000Z');
+  await env.DB.prepare(
+    "UPDATE show_and_tell_events SET trashed_at = CURRENT_TIMESTAMP WHERE id = 'show'",
+  ).run();
+  await processShowReminders(config(), now);
+  expect(await statuses()).toEqual([{channel: 'email', status: 'pending'}]);
+  await env.DB.prepare(
+    "UPDATE show_and_tell_events SET trashed_at = NULL WHERE id = 'show'",
+  ).run();
+  await processShowReminders(config(), now);
+  expect(send).not.toHaveBeenCalled();
+  expect(await statuses()).toEqual([{channel: 'email', status: 'skipped'}]);
+});
+
 it('does not require an origin while reminders are disabled', async () => {
   await expect(
     processShowReminders(

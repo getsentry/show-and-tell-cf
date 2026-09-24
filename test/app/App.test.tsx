@@ -11,6 +11,142 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it.each(['/', '/events/october'])(
+    'edits title and description from %s without changing links',
+    async (path) => {
+      let saved = false;
+      const updated = {
+        ...october,
+        title: 'Updated show',
+        description: 'Updated description',
+      };
+      const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === '/api/session') return jsonResponse({user: admin});
+        if (url === '/api/events')
+          return Response.json({events: [saved ? updated : october]});
+        if (url === '/api/events/october') {
+          if (init?.method === 'PUT') {
+            saved = true;
+            return Response.json({event: updated});
+          }
+          return Response.json({event: saved ? updated : october, submissions: []});
+        }
+        throw new Error(url);
+      });
+      vi.stubGlobal('fetch', fetcher);
+      window.history.replaceState(null, '', path);
+      render(<App />);
+      fireEvent.click(await screen.findByRole('button', {name: 'Edit playlist'}));
+      expect(screen.getByRole('textbox', {name: 'Playlist title'})).toHaveValue(
+        october.title,
+      );
+      fireEvent.change(screen.getByRole('textbox', {name: 'Playlist title'}), {
+        target: {value: 'Discard me'},
+      });
+      fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+      expect(fetcher.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+      fireEvent.click(screen.getByRole('button', {name: 'Edit playlist'}));
+      expect(screen.getByRole('textbox', {name: 'Playlist title'})).toHaveValue(
+        october.title,
+      );
+      fireEvent.change(screen.getByRole('textbox', {name: 'Playlist title'}), {
+        target: {value: 'Updated show'},
+      });
+      fireEvent.change(
+        screen.getByRole('textbox', {name: 'Playlist description (optional)'}),
+        {target: {value: 'Updated description'}},
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Save changes'}));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('form', {name: 'Edit playlist'}),
+        ).not.toBeInTheDocument(),
+      );
+      expect(screen.getByRole('heading', {name: 'Updated show'})).toBeInTheDocument();
+      expect(screen.getByText('Updated description')).toBeInTheDocument();
+      expect(window.location.pathname).toBe(path);
+      expect(
+        fetcher.mock.calls.find(([, init]) => init?.method === 'PUT')?.[1]?.body,
+      ).toBe(JSON.stringify({title: 'Updated show', description: 'Updated description'}));
+      expect(
+        screen.getByRole('link', {
+          name: path === '/' ? 'Watch playlist' : 'Open the screening',
+        }),
+      ).toHaveAttribute('href', '/playlists/october');
+    },
+  );
+
+  it('confirms playlist trash, preserves the page on failure, and restores from the overview', async () => {
+    let trashed = false;
+    let fail = true;
+    const pending = deferred<Response>();
+    const fetcher = vi.fn(async (url: string) => {
+      if (url === '/api/session') return jsonResponse({user: admin});
+      if (url === '/api/events') return jsonResponse({events: trashed ? [] : [october]});
+      if (url === '/api/events?trash=true')
+        return jsonResponse({events: trashed ? [october] : []});
+      if (url === '/api/events/october') return jsonResponse(detailFor(october));
+      if (url === '/api/events/october/trash') {
+        if (fail) return pending.promise;
+        trashed = true;
+        return new Response(null, {status: 204});
+      }
+      if (url === '/api/events/october/restore') {
+        trashed = false;
+        return new Response(null, {status: 204});
+      }
+      throw new Error(url);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    window.history.replaceState(null, '', '/events/october');
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Edit playlist'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Move to trash'}));
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'Submissions and videos are kept',
+    );
+    expect(screen.getByRole('button', {name: 'Keep playlist'})).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', {name: 'Keep playlist'}));
+    expect(fetcher.mock.calls.some(([url]) => url.endsWith('/trash'))).toBe(false);
+    fireEvent.click(screen.getByRole('button', {name: 'Move to trash'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Move playlist to trash'}));
+    expect(screen.getByRole('button', {name: 'Moving…'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Keep playlist'})).toBeDisabled();
+    await act(async () =>
+      pending.resolve(Response.json({error: {message: 'Try again'}}, {status: 503})),
+    );
+    expect(screen.getByRole('dialog')).toHaveTextContent('Try again');
+    expect(window.location.pathname).toBe('/events/october');
+    fail = false;
+    fireEvent.click(screen.getByRole('button', {name: 'Move playlist to trash'}));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('article', {name: october.title})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'View trash'}));
+    fireEvent.click(await screen.findByRole('button', {name: 'Restore playlist'}));
+    expect(await screen.findByText('Trash is empty.')).toBeInTheDocument();
+    expect(await screen.findByRole('article', {name: october.title})).toBeInTheDocument();
+  });
+
+  it('does not expose playlist trash controls to members', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/session')
+          return jsonResponse({user: {...admin, role: 'member', actualRole: 'member'}});
+        if (url === '/api/events') return jsonResponse({events: [october]});
+        if (url === '/api/events/october') return jsonResponse(detailFor(october));
+        throw new Error(url);
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole('link', {name: 'Upload & submissions'}));
+    await screen.findByRole('form', {name: 'Create submission'});
+    expect(screen.queryByRole('button', {name: 'Move to trash'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', {name: '← All shows'}));
+    expect(screen.queryByRole('button', {name: 'View trash'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Edit playlist'})).not.toBeInTheDocument();
+  });
   it('shows only Loading while the session is pending, then clears it', async () => {
     const session = deferred<Response>();
     vi.stubGlobal(
@@ -224,6 +360,39 @@ describe('App', () => {
     await act(async () => pending.resolve(jsonResponse({event: october})));
     expect(window.location.pathname).toBe('/');
     expect(screen.queryByRole('form', {name: 'Create playlist'})).not.toBeInTheDocument();
+  });
+
+  it('keeps unsaved edits open when an earlier playlist create finishes', async () => {
+    const pending = deferred<Response>();
+    let created = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === '/api/session') return jsonResponse({user: admin});
+        if (url === '/api/events') {
+          if (init?.method === 'POST') return pending.promise;
+          return jsonResponse({events: created ? [november, october] : [october]});
+        }
+        throw new Error(url);
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', {name: 'New playlist'}));
+    fireEvent.submit(screen.getByRole('form', {name: 'Create playlist'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Edit playlist'}));
+    fireEvent.change(screen.getByRole('textbox', {name: 'Playlist title'}), {
+      target: {value: 'Unsaved title'},
+    });
+    created = true;
+    await act(async () => pending.resolve(jsonResponse({event: november})));
+    expect(screen.getByRole('form', {name: 'Edit playlist'})).toBeInTheDocument();
+    expect(screen.getByRole('textbox', {name: 'Playlist title'})).toHaveValue(
+      'Unsaved title',
+    );
+    expect(window.location.pathname).toBe('/');
+    fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+    expect(screen.getByRole('article', {name: november.title})).toBeInTheDocument();
+    expect(screen.getByRole('article', {name: october.title})).toBeInTheDocument();
   });
 
   it('never exposes admin controls to a member on the overview', async () => {

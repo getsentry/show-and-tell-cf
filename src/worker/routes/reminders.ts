@@ -52,7 +52,7 @@ reminderRoutes.post('/test-email', bodyLimit({maxSize: 1024}), async (c) => {
     return c.json({error: {message: 'Email binding or sender is not configured.'}}, 503);
 
   const show = await c.env.DB.prepare(
-    'SELECT id,title,slug,starts_at,meeting_url FROM show_and_tell_events WHERE id=? AND starts_at IS NOT NULL',
+    'SELECT id,title,slug,starts_at,meeting_url FROM show_and_tell_events WHERE id=? AND starts_at IS NOT NULL AND trashed_at IS NULL',
   )
     .bind(input.eventId)
     .first<EmailShow>();
@@ -109,7 +109,7 @@ reminderRoutes.get('/', async (c) => {
     await c.env.DB.prepare(`SELECT e.id, e.title, e.slug, e.starts_at, e.reminder_at, e.timezone, e.meeting_url, e.cancelled_at,
       r.channel, r.status, r.attempted_at, r.completed_at
     FROM show_reminders r JOIN show_and_tell_events e ON e.id = r.event_id
-    WHERE r.channel = 'email'
+    WHERE r.channel = 'email' AND e.trashed_at IS NULL
     ORDER BY CASE WHEN r.status = 'pending' AND e.cancelled_at IS NULL AND e.starts_at > ? AND e.reminder_at >= ? THEN 0 ELSE 1 END,
       e.reminder_at, e.id, r.channel LIMIT 51 OFFSET ?`)
       .bind(timestamp, stale, offset)

@@ -12,7 +12,7 @@ export const playlistRoutes = new Hono<WorkerEnv>();
 
 playlistRoutes.get('/:eventId/playlist', async (c) => {
   const event = await c.env.DB.prepare(
-    'SELECT id, title, description, slug FROM show_and_tell_events WHERE id = ?',
+    'SELECT id, title, description, slug FROM show_and_tell_events WHERE id = ? AND trashed_at IS NULL',
   )
     .bind(c.req.param('eventId'))
     .first<PlaylistResponse['event']>();
@@ -40,6 +40,7 @@ playlistRoutes.get('/:eventId/playlist', async (c) => {
 playlistRoutes.get('/:eventId/playlist/:videoId/playback', async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT v.id FROM video_submissions v JOIN submissions s ON s.id = v.submission_id
+     JOIN show_and_tell_events e ON e.id = s.event_id AND e.trashed_at IS NULL
      WHERE s.event_id = ? AND v.id = ? AND s.deleted_at IS NULL AND s.is_hidden = 0
        AND v.status = 'ready' AND v.retired_at IS NULL AND v.processed_r2_key IS NOT NULL`,
   )
@@ -80,7 +81,9 @@ playlistRoutes.put('/:eventId/order', requireRole('admin'), async (c) => {
     );
   }
   const eventId = c.req.param('eventId');
-  const event = await c.env.DB.prepare('SELECT id FROM show_and_tell_events WHERE id = ?')
+  const event = await c.env.DB.prepare(
+    'SELECT id FROM show_and_tell_events WHERE id = ? AND trashed_at IS NULL',
+  )
     .bind(eventId)
     .first();
   if (!event) return c.json({error: {message: 'Playlist not found'}}, 404);

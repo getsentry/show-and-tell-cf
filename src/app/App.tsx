@@ -23,6 +23,8 @@ import {Loader} from './components/Loader';
 import {SentrySymbol} from './components/SentrySymbol';
 import {ThemeToggle} from './components/ThemeToggle';
 import {PlaylistOrder} from './PlaylistOrder';
+import {PlaylistTrash} from './PlaylistTrash';
+import {PlaylistEditor} from './PlaylistEditor';
 import {ReminderList} from './ReminderList';
 import {PlaylistPage, SharePlaylist} from './PlaylistPage';
 import {VideoPanel} from './VideoPanel';
@@ -84,12 +86,15 @@ function ShowAndTell({
   const [selectedId, setSelectedId] = useState<string | null>(currentEventId);
   const [showCreate, setShowCreate] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [editing, setEditing] = useState<ShowAndTellEvent | null>(null);
   const [selected, setSelected] = useState<EventResponse | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [failedSelection, setFailedSelection] = useState<string | null>(null);
   const selectedIdRef = useRef<string | null>(selectedId);
+  const navigationRevision = useRef(0);
   const eventsRequest = useRef(0);
   const selectedRequests = useRef(new Map<string, number>());
   const [creatingEvent, setCreatingEvent] = useState(false);
@@ -113,11 +118,13 @@ function ShowAndTell({
 
   const selectEvent = useCallback(
     (eventId: string | null, push = true, slug?: string) => {
+      navigationRevision.current++;
       if (eventId !== selectedIdRef.current) {
         setFailedSelection(null);
         setSelectionError(null);
       }
       setDeleteId(null);
+      setEditing(null);
       setMutationError(null);
       const destination = eventId ? submissionPath(eventId, slug) : '/';
       if (push && `${window.location.pathname}${window.location.search}` !== destination)
@@ -128,15 +135,16 @@ function ShowAndTell({
     [],
   );
   const loadEvents = useCallback(async () => {
+    if (!mounted.current) return;
     const request = ++eventsRequest.current;
     try {
       const result = await api<EventsResponse>('/events');
-      if (request !== eventsRequest.current) return;
+      if (request !== eventsRequest.current || !mounted.current) return;
       setEvents(result.events);
       setEventsLoaded(true);
       setEventsError(null);
     } catch (cause) {
-      if (request !== eventsRequest.current) return;
+      if (request !== eventsRequest.current || !mounted.current) return;
       setEventsError(cause instanceof Error ? cause.message : 'Request failed');
     }
   }, []);
@@ -199,7 +207,7 @@ function ShowAndTell({
     if (eventPending.current) return;
     eventPending.current = true;
     setCreatingEvent(true);
-    const previousSelection = selectedIdRef.current;
+    const previousNavigation = navigationRevision.current;
     try {
       const result = await api<{event: ShowAndTellEvent}>(
         '/events',
@@ -221,7 +229,7 @@ function ShowAndTell({
         ...current.filter((entry) => entry.id !== result.event.id),
       ]);
       setEventsLoaded(true);
-      if (selectedIdRef.current === previousSelection)
+      if (navigationRevision.current === previousNavigation)
         selectEvent(result.event.id, true, result.event.slug);
       await loadEvents();
     } finally {
@@ -273,6 +281,40 @@ function ShowAndTell({
     }
   }
 
+  function editPlaylist(event: ShowAndTellEvent) {
+    // Opening the editor is navigation even when the selected playlist stays the same.
+    navigationRevision.current++;
+    setEditing(event);
+  }
+
+  function playlistSaved(event: ShowAndTellEvent) {
+    if (!mounted.current) return;
+    setEditing((current) => (current?.id === event.id ? null : current));
+    // Invalidate older detail reads so they cannot overwrite the saved title.
+    selectedRequests.current.set(
+      event.id,
+      (selectedRequests.current.get(event.id) ?? 0) + 1,
+    );
+    setSelected((current) =>
+      current?.event.id === event.id ? {...current, event} : current,
+    );
+    setEvents((current) =>
+      current.map((entry) => (entry.id === event.id ? event : entry)),
+    );
+    void loadEvents();
+  }
+
+  function playlistTrashed(id: string) {
+    if (!mounted.current) return;
+    setEditing((current) => (current?.id === id ? null : current));
+    setEvents((current) => current.filter((entry) => entry.id !== id));
+    if (selectedIdRef.current === id) {
+      selectEvent(null);
+      setSelected(null);
+    }
+    void loadEvents();
+  }
+
   async function setHidden(submissionId: string, hidden: boolean) {
     if (!selectedId) return;
     await api(
@@ -316,6 +358,20 @@ function ShowAndTell({
   }, [createdSubmission, selectedId, visibleSelection]);
 
   const errors = [eventsError, selectionError, mutationError].filter(Boolean);
+  if (admin && editing)
+    return (
+      <AppFrame user={user} section="playlists" onViewModeChange={onViewModeChange}>
+        <main className="homePage">
+          <PlaylistEditor
+            key={editing.id}
+            event={editing}
+            onSaved={playlistSaved}
+            onTrashed={playlistTrashed}
+            onCancel={() => setEditing(null)}
+          />
+        </main>
+      </AppFrame>
+    );
   return (
     <AppFrame user={user} section="playlists" onViewModeChange={onViewModeChange}>
       <main className="homePage">
@@ -345,6 +401,17 @@ function ShowAndTell({
                   {showReminders ? 'Close reminders' : 'View reminders'}
                 </button>
                 <div id="admin-reminders">{showReminders ? <ReminderList /> : null}</div>
+                <button
+                  className="textAction"
+                  aria-expanded={showTrash}
+                  aria-controls="playlist-trash"
+                  onClick={() => setShowTrash((value) => !value)}
+                >
+                  {showTrash ? 'Close trash' : 'View trash'}
+                </button>
+                <div id="playlist-trash">
+                  {showTrash ? <PlaylistTrash onRestored={loadEvents} /> : null}
+                </div>
               </div>
             ) : null}
             <section className="overviewSection" aria-label="Show & Tell playlists">
@@ -452,6 +519,9 @@ function ShowAndTell({
                       >
                         Upload &amp; submissions
                       </a>
+                      {admin ? (
+                        <button onClick={() => editPlaylist(event)}>Edit playlist</button>
+                      ) : null}
                     </div>
                   </article>
                 ))}
@@ -544,6 +614,11 @@ function ShowAndTell({
                     {visibleSelection.event.hidden
                       ? 'Show on member overview'
                       : 'Hide from member overview'}
+                  </button>
+                ) : null}
+                {admin ? (
+                  <button onClick={() => editPlaylist(visibleSelection.event)}>
+                    Edit playlist
                   </button>
                 ) : null}
                 {visibleSelection.event.cancelledAt ? (
