@@ -9,12 +9,16 @@ import {
   withSentry,
   CloudflareClient,
   getIsolationScope,
+  metrics,
   type CloudflareOptions,
   type Event,
 } from '@sentry/cloudflare';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import worker, {app, VideoProcessingWorkflow} from '../../src/worker';
 import {sentryOptions} from '../../src/worker/sentry';
+import {SESSION_COOKIE_NAME} from '../../src/worker/middleware/auth';
+import {createSession} from '../../src/worker/services/sessions';
+import {synchronizeGoogleUser} from '../../src/worker/services/users';
 import {errorResponse, ServiceError} from '../../src/worker/services/errors';
 import {VideoProcessingWorkflow as ProcessingWorkflow} from '../../src/worker/workflows/video-processing';
 
@@ -25,6 +29,8 @@ function collectEvents(events: Event[]): CloudflareOptions {
   return {
     ...sentryOptions({SENTRY_DSN: dsn, SENTRY_ENVIRONMENT: 'test'}),
     tracesSampleRate: 0,
+    beforeSendLog: () => null,
+    beforeSendMetric: () => null,
     beforeSend(event) {
       events.push(event);
       return null;
@@ -33,27 +39,38 @@ function collectEvents(events: Event[]): CloudflareOptions {
 }
 
 describe('Sentry Worker coverage', () => {
-  it('disables local delivery and configures restrictive v11 collection', () => {
+  it('disables local delivery and enables all v11 collection categories', () => {
     expect(sentryOptions({})).toMatchObject({enabled: false});
     expect(
       sentryOptions({SENTRY_DSN: dsn, CF_VERSION_METADATA: {id: 'version-id'}}),
     ).toMatchObject({
       enabled: true,
       release: 'version-id',
+      tracesSampleRate: 1,
       dataCollection: {
-        userInfo: false,
-        cookies: false,
-        httpHeaders: false,
-        httpBodies: [],
-        urlQueryParams: false,
-        databaseQueryData: false,
+        userInfo: true,
+        cookies: true,
+        httpHeaders: {request: true, response: true},
+        httpBodies: [
+          'incomingRequest',
+          'outgoingRequest',
+          'incomingResponse',
+          'outgoingResponse',
+        ],
+        urlQueryParams: true,
+        databaseQueryData: true,
+        genAI: {inputs: true, outputs: true},
+        graphQL: {document: true, variables: true},
+        queues: true,
+        stackFrameVariables: true,
+        frameContextLines: 5,
       },
     });
     expect(VideoProcessingWorkflow).not.toBe(ProcessingWorkflow);
     expect(VideoProcessingWorkflow.prototype).toBe(ProcessingWorkflow.prototype);
   });
 
-  it('captures a Hono-handled exception once, without request secrets', async () => {
+  it('collects request context while keeping SDK sensitive-key filtering', async () => {
     const events: Event[] = [];
     const handler = withSentry(() => collectEvents(events), {
       fetch: (
@@ -71,11 +88,22 @@ describe('Sentry Worker coverage', () => {
       connect: env.ASSETS.connect.bind(env.ASSETS),
     };
     const response = await handler.fetch(
-      new Request('https://showntell.test/screening?code=oauth-secret', {
-        method: 'POST',
-        headers: {cookie: 'session=cookie-secret', authorization: 'Bearer token-secret'},
-        body: 'private-video-body',
-      }),
+      new Request(
+        'https://showntell.test/screening?view=screen&access_token=oauth-secret',
+        {
+          method: 'POST',
+          headers: {
+            cookie: 'session=cookie-secret; theme=dark',
+            authorization: 'Bearer token-secret',
+            'content-type': 'application/json',
+            'x-debug-context': 'screening',
+          },
+          body: JSON.stringify({
+            title: 'Test screening',
+            description: 'Full request context',
+          }),
+        },
+      ),
       {...env, ASSETS: assets},
       ctx,
     );
@@ -90,14 +118,64 @@ describe('Sentry Worker coverage', () => {
       user: events[0].user,
       breadcrumbs: events[0].breadcrumbs,
     });
-    for (const secret of [
-      'oauth-secret',
-      'cookie-secret',
-      'token-secret',
-      'private-video-body',
-    ]) {
+    expect(serialized).toContain('Test screening');
+    expect(serialized).toContain('screen');
+    expect(serialized).toContain('dark');
+    expect(events[0].request?.headers?.['x-debug-context']).toBe('screening');
+    for (const secret of ['oauth-secret', 'cookie-secret', 'token-secret']) {
       expect(serialized).not.toContain(secret);
     }
+  });
+
+  it('attaches authenticated user context without leaking it into another request', async () => {
+    const user = await synchronizeGoogleUser(env.DB, {
+      subject: 'sentry-context-test',
+      email: 'sentry-context-test@sentry.io',
+      displayName: 'Telemetry Test',
+      avatarUrl: null,
+    });
+    const session = await createSession(env.DB, user.id);
+    const events: Event[] = [];
+    const handler = withSentry(() => collectEvents(events), {
+      fetch: (
+        request: Request,
+        bindings: Parameters<typeof app.fetch>[1],
+        ctx: ExecutionContext,
+      ) => app.fetch(request, bindings, ctx),
+    });
+    const bindings = {
+      ...env,
+      ASSETS: {
+        fetch: async () => {
+          throw new Error('User context test');
+        },
+        connect: env.ASSETS.connect.bind(env.ASSETS),
+      },
+    };
+    const authenticated = createExecutionContext();
+    await handler.fetch(
+      new Request('https://showntell.test/api/unknown', {
+        headers: {cookie: `${SESSION_COOKIE_NAME}=${session.token}`},
+      }),
+      bindings,
+      authenticated,
+    );
+    await waitOnExecutionContext(authenticated);
+    const anonymous = createExecutionContext();
+    await handler.fetch(
+      new Request('https://showntell.test/unknown'),
+      bindings,
+      anonymous,
+    );
+    await waitOnExecutionContext(anonymous);
+    expect(events).toHaveLength(2);
+    expect(events[0].user).toMatchObject({
+      id: user.id,
+      email: user.email,
+      username: 'Telemetry Test',
+    });
+    expect(events[1].user?.id).toBeUndefined();
+    expect(events[1].user?.email).toBeUndefined();
   });
 
   it('captures handled server errors but not validation/conflict errors', async () => {
@@ -115,6 +193,33 @@ describe('Sentry Worker coverage', () => {
     await waitOnExecutionContext(ctx);
     expect(events).toHaveLength(1);
     expect(events[0].tags?.code).toBe('STORAGE_FAILED');
+  });
+
+  it('flushes console logs, metrics, and streamed spans', async () => {
+    const deliveries: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      deliveries.push(await new Response(init?.body).text());
+      return new Response('{}');
+    });
+    const handler = withSentry(() => sentryOptions({SENTRY_DSN: dsn}), {
+      async fetch(_request: Request, _env: Env, _ctx: ExecutionContext) {
+        console.info('Sentry console log test');
+        metrics.count('video.processing.run_outcome', 1, {attributes: {status: 'ready'}});
+        return new Response('ok');
+      },
+    });
+    const ctx = createExecutionContext();
+    const response = await handler.fetch(
+      new Request('https://showntell.test/'),
+      env,
+      ctx,
+    );
+    await response.text();
+    await waitOnExecutionContext(ctx);
+    const envelopes = deliveries.join('\n');
+    expect(envelopes).toContain('Sentry console log test');
+    expect(envelopes).toContain('video.processing.run_outcome');
+    expect(envelopes).toContain('"type":"span"');
   });
 
   it('flushes scheduled failures through the production wrapper', async () => {

@@ -1,5 +1,5 @@
 import {getContainer} from '@cloudflare/containers';
-import {captureException, setAttributes, setTags} from '@sentry/cloudflare';
+import {captureException, metrics, setAttributes, setTags} from '@sentry/cloudflare';
 import type {SentryEnv} from '../sentry';
 import {
   WorkflowEntrypoint,
@@ -44,11 +44,19 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
     setTags({component: 'video-processing', videoId, attempt: String(attempt)});
     setAttributes({'video.id': videoId, 'video.processing_attempt': attempt});
     try {
-      return await this.process(event, step);
+      const result = await this.process(event, step);
+      // Invocation outcomes, not an exactly-once business counter: Workflows can replay.
+      metrics.count('video.processing.run_outcome', 1, {
+        attributes: {status: result.status},
+      });
+      return result;
     } catch (error) {
       // The SDK captures step callback failures; also cover failures outside a
       // callback (for example platform timeouts, sleeps, or workflow bookkeeping).
       captureException(error);
+      metrics.count('video.processing.run_outcome', 1, {
+        attributes: {status: 'errored'},
+      });
       throw error;
     }
   }

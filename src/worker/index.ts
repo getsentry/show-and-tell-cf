@@ -1,6 +1,8 @@
 import {
   captureException,
   instrumentWorkflowWithSentry,
+  setUser,
+  setAttribute,
   withSentry,
 } from '@sentry/cloudflare';
 import {Hono} from 'hono';
@@ -69,6 +71,12 @@ app.use('*', async (c, next) => {
 app.get('/api/health', (c) => c.json({ok: true}));
 app.route('/api/auth', authRoutes);
 app.use('/api/*', authenticateRequest<WorkerEnv>());
+app.use('/api/*', async (c, next) => {
+  const user = c.get('user');
+  setUser({id: user.id, email: user.email, username: user.displayName});
+  setAttribute('user.role', user.role);
+  await next();
+});
 app.use('/api/*', protectMutationOrigin<WorkerEnv>());
 app.route('/api/auth', authenticatedAuthRoutes);
 app.route('/api/session', sessionRoutes);
