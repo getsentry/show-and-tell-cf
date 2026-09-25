@@ -8,7 +8,6 @@ import {
 import {
   withSentry,
   CloudflareClient,
-  getIsolationScope,
   metrics,
   type CloudflareOptions,
   type Event,
@@ -245,7 +244,7 @@ describe('Sentry Worker coverage', () => {
 
 // Run the actual deployed workflow export in workerd, with platform step faults.
 describe('Sentry video workflow coverage', () => {
-  it('lets the SDK capture a real step callback failure with video context', async () => {
+  it('reports a real callback failure once after exhausting retries', async () => {
     const capture = vi.spyOn(CloudflareClient.prototype, 'captureException');
     await using instance = await introspectWorkflowInstance(
       env.VIDEO_PROCESSING_WORKFLOW,
@@ -269,6 +268,7 @@ describe('Sentry video workflow coverage', () => {
     });
     await instance.waitForStatus('complete');
     expect(await instance.getOutput()).toEqual({status: 'failed', stage: 'publication'});
+    expect(capture).toHaveBeenCalledTimes(1);
     expect(
       capture.mock.calls.some(
         ([error]) =>
@@ -280,19 +280,9 @@ describe('Sentry video workflow coverage', () => {
   });
 
   it.each(['claim', 'processor', 'publication'] as const)(
-    'captures handled %s failure with video/attempt/stage context',
+    'does not recapture a cached %s step error',
     async (stage) => {
-      // Local DSN stays empty: spy at the SDK client boundary, not on our code.
-      const capturedTags: Array<Event['tags']> = [];
-      // Preserve the SDK implementation and receiver while observing isolation tags.
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const originalCapture = CloudflareClient.prototype.captureException;
-      const capture = vi
-        .spyOn(CloudflareClient.prototype, 'captureException')
-        .mockImplementation(function (this: CloudflareClient, ...args) {
-          capturedTags.push(getIsolationScope().getScopeData().tags);
-          return originalCapture.apply(this, args);
-        });
+      const capture = vi.spyOn(CloudflareClient.prototype, 'captureException');
       const id = `sentry-${stage}`;
       await using instance = await introspectWorkflowInstance(
         env.VIDEO_PROCESSING_WORKFLOW,
@@ -324,13 +314,53 @@ describe('Sentry video workflow coverage', () => {
       await env.VIDEO_PROCESSING_WORKFLOW.create({id, params: {videoId: id, attempt: 2}});
       await instance.waitForStatus('complete');
       expect(await instance.getOutput()).toEqual({status: 'failed', stage});
+      expect(capture).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['claim', 'processor', 'publication'] as const)(
+    'reports a platform %s timeout once after the failure write succeeds',
+    async (stage) => {
+      const capture = vi.spyOn(CloudflareClient.prototype, 'captureException');
+      const id = `sentry-timeout-${stage}`;
+      await using instance = await introspectWorkflowInstance(
+        env.VIDEO_PROCESSING_WORKFLOW,
+        id,
+      );
+      await instance.modify(async (m) => {
+        await m.disableRetryDelays();
+        if (stage !== 'claim') {
+          await m.mockStepResult(
+            {name: 'claim current processing attempt'},
+            {status: 'claimed', outputKey: 'output.mp4'},
+          );
+        }
+        if (stage === 'publication') {
+          await m.mockStepResult(
+            {name: 'run pinned ffmpeg processor'},
+            {status: 'processed', result: {sha256: 'checksum'}},
+          );
+        }
+        const name =
+          stage === 'claim'
+            ? 'claim current processing attempt'
+            : stage === 'processor'
+              ? 'run pinned ffmpeg processor'
+              : 'publish only if attempt is current';
+        await m.forceStepTimeout({name});
+        // Retry the persistence step once before executing its real callback.
+        await m.mockStepError(
+          {name: `record ${stage} failure`},
+          new Error('Transient D1 failure'),
+          1,
+        );
+      });
+      await env.VIDEO_PROCESSING_WORKFLOW.create({id, params: {videoId: id, attempt: 1}});
+      await instance.waitForStatus('complete');
+      expect(await instance.getOutput()).toEqual({status: 'failed', stage});
       expect(capture).toHaveBeenCalledTimes(1);
-      expect(capture.mock.calls[0][0]).toMatchObject({message: `${stage} failed`});
-      expect(capturedTags[0]).toMatchObject({
-        component: 'video-processing',
-        videoId: id,
-        attempt: '2',
-        'video.stage': stage,
+      expect(capture.mock.calls[0][0]).toMatchObject({
+        message: 'Execution timed out after 0ms',
       });
     },
   );

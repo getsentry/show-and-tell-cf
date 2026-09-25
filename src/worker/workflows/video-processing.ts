@@ -51,9 +51,8 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
       });
       return result;
     } catch (error) {
-      // The SDK captures step callback failures; also cover failures outside a
-      // callback (for example platform timeouts, sleeps, or workflow bookkeeping).
-      captureException(error);
+      // Step callback exceptions are owned by the SDK, including failures while
+      // recording status. Capturing here would repeat them on workflow replay.
       metrics.count('video.processing.run_outcome', 1, {
         attributes: {status: 'errored'},
       });
@@ -86,12 +85,12 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
             ),
         );
       } catch (error) {
-        captureException(error);
         const message = errorMessage(error);
         logVideoProcessing('error', 'claim_failed', {videoId, attempt, message});
-        await step.do('record claim failure', () =>
-          failVideoProcessingAttempt(this.env.DB, videoId, attempt, message),
-        );
+        await step.do('record claim failure', async () => {
+          await failVideoProcessingAttempt(this.env.DB, videoId, attempt, message);
+          if (error instanceof Error) capturePlatformTimeout(error);
+        });
         return {status: 'failed', stage: 'claim'};
       }
       if (candidate.status === 'capacity') {
@@ -153,12 +152,12 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
           },
         );
       } catch (error) {
-        captureException(error);
         const message = errorMessage(error);
         logVideoProcessing('error', 'processor_failed', {videoId, attempt, message});
-        await step.do('record processor failure', () =>
-          failVideoProcessingAttempt(this.env.DB, videoId, attempt, message),
-        );
+        await step.do('record processor failure', async () => {
+          await failVideoProcessingAttempt(this.env.DB, videoId, attempt, message);
+          if (error instanceof Error) capturePlatformTimeout(error);
+        });
         return {status: 'failed', stage: 'processor'};
       }
       if (outcome.status === 'capacity') {
@@ -196,10 +195,15 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
         );
       });
     } catch (error) {
-      captureException(error);
-      await step.do('record publication failure', () =>
-        failVideoProcessingAttempt(this.env.DB, videoId, attempt, errorMessage(error)),
-      );
+      await step.do('record publication failure', async () => {
+        await failVideoProcessingAttempt(
+          this.env.DB,
+          videoId,
+          attempt,
+          errorMessage(error),
+        );
+        if (error instanceof Error) capturePlatformTimeout(error);
+      });
       return {status: 'failed', stage: 'publication'};
     }
     logVideoProcessing(
@@ -246,6 +250,18 @@ async function destroyProcessorContainer(
         message: errorMessage(stopError),
       });
     }
+  }
+}
+
+// Platform timeouts bypass the SDK callback catch. Call only after the failure
+// write, inside its durable step, so replay and persistence retries don't recapture.
+function capturePlatformTimeout(error: Error) {
+  // Workflows RPC may serialize custom errors as plain Error, losing their name.
+  if (
+    error.name === 'WorkflowTimeoutError' ||
+    /^Execution timed out after \d+ms$/.test(error.message)
+  ) {
+    captureException(error);
   }
 }
 
