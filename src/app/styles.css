@@ -27,6 +27,9 @@
   --shadow-ink: 29, 17, 39;
   --blurple: #7553ff;
   --dark-blurple: #4e2a9a;
+  --accent-ink: #4e2a9a;
+  --action-bg: #6846eb;
+  --action-ink: #fff;
   --pink: #ff70bc;
   --green: #92dd00;
   --yellow: #fdb81b;
@@ -68,6 +71,9 @@
   --shadow-ink: 0, 0, 0;
   --blurple: #9b82ff;
   --dark-blurple: #6b45c8;
+  --accent-ink: #b5a1ff;
+  --action-bg: #9b82ff;
+  --action-ink: #1d1127;
   --pink: #ff8acc;
   --green: #a8e84a;
   --yellow: #ffc94a;
@@ -132,7 +138,7 @@ input:disabled {
   opacity: 0.58;
 }
 :focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--blurple) 35%, transparent);
+  outline: 3px solid var(--blurple);
   outline-offset: 3px;
 }
 ::selection {
@@ -156,18 +162,20 @@ main {
 }
 
 /* Bare buttons are the secondary action; named classes below are the rest. */
-button:not([class]) {
+button:not([class]),
+.secondaryAction {
   display: inline-flex;
   gap: 0.4rem;
   align-items: center;
   justify-content: center;
-  min-height: 2.35rem;
+  min-height: 2.75rem;
   padding: 0.5rem 0.85rem;
   color: var(--ink);
   font-size: 0.82rem;
   font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
   border: 1px solid var(--border-strong);
   border-radius: 0.55rem;
   background: var(--surface-raised);
@@ -177,7 +185,8 @@ button:not([class]) {
     background 100ms ease,
     transform 100ms ease;
 }
-button:not([class]):hover:not(:disabled) {
+button:not([class]):hover:not(:disabled),
+.secondaryAction:hover:not(:disabled) {
   color: var(--blurple);
   border-color: var(--blurple);
   transform: translateY(-1px);
@@ -188,12 +197,12 @@ button:not([class]):hover:not(:disabled) {
   gap: 0.5rem;
   align-items: center;
   justify-content: center;
-  min-height: 2.65rem;
+  min-height: 2.75rem;
   padding: 0.65rem 1rem;
   font-size: 0.85rem;
   font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
+  line-height: 1.3;
+  text-align: center;
   text-decoration: none;
   border: 2px solid;
   border-radius: 0.65rem;
@@ -205,14 +214,14 @@ button:not([class]):hover:not(:disabled) {
     transform 100ms ease;
 }
 .primaryAction {
-  color: var(--on-accent);
-  border-color: var(--blurple);
-  background: var(--blurple);
+  color: var(--action-ink);
+  border-color: var(--action-bg);
+  background: var(--action-bg);
 }
 .primaryAction:hover:not(:disabled) {
-  color: var(--on-accent);
-  border-color: var(--dark-blurple);
-  background: var(--dark-blurple);
+  color: var(--action-ink);
+  border-color: color-mix(in srgb, var(--action-bg) 88%, var(--ink));
+  background: color-mix(in srgb, var(--action-bg) 88%, var(--ink));
   transform: translateY(-1px);
 }
 .primaryAction--play::before {
@@ -228,11 +237,45 @@ button:not([class]):hover:not(:disabled) {
   border-color: var(--blurple);
 }
 .textAction:hover:not(:disabled) {
-  color: var(--on-accent);
-  background: var(--blurple);
+  color: var(--action-ink);
+  background: var(--action-bg);
+  border-color: var(--action-bg);
+}
+.secondaryAction[aria-expanded='true'] {
+  color: var(--accent-ink);
+  border-color: var(--blurple);
+  background: var(--surface-tint-strong);
+}
+button:not([class]):active:not(:disabled),
+.secondaryAction:active:not(:disabled),
+.primaryAction:active:not(:disabled),
+.textAction:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.arrowIcon {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  vertical-align: middle;
+}
+.arrowIcon[data-direction='up'] {
+  transform: rotate(90deg);
+}
+.arrowIcon[data-direction='down'] {
+  transform: rotate(-90deg);
+}
+.arrowIcon[data-direction='right'] {
+  transform: rotate(180deg);
+}
+.actionGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 .textButton {
-  padding: 0;
+  min-height: 2.75rem;
+  padding: 0.35rem;
   color: var(--muted);
   font-size: 0.72rem;
   text-decoration: underline;
@@ -307,7 +350,7 @@ textarea::placeholder {
   align-items: center;
   width: fit-content;
   padding: 0.32rem 0.6rem;
-  color: var(--dark-blurple);
+  color: var(--accent-ink);
   font-size: 0.7rem;
   font-weight: 600;
   line-height: 1;
@@ -493,12 +536,12 @@ textarea::placeholder {
 .themeToggle {
   position: relative;
   display: grid;
-  width: 3rem;
-  height: 1.65rem;
-  flex: 0 0 3rem;
+  width: 3.75rem;
+  height: 2.75rem;
+  flex: 0 0 3.75rem;
   grid-template-columns: 1fr 1fr;
   align-items: center;
-  padding: 0 0.22rem;
+  padding: 0 0.35rem;
   color: var(--muted);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -515,23 +558,23 @@ textarea::placeholder {
 .themeToggleMoon {
   position: relative;
   z-index: 1;
-  font-size: 0.7rem;
-  line-height: 1;
-  text-align: center;
+  width: 1rem;
+  height: 1rem;
+  justify-self: center;
 }
 .themeToggleThumb {
   position: absolute;
-  top: 0.17rem;
-  left: 0.17rem;
-  width: 1.18rem;
-  height: 1.18rem;
+  top: 0.5rem;
+  left: 0.25rem;
+  width: 1.65rem;
+  height: 1.65rem;
   border-radius: 50%;
   background: var(--surface-raised);
   box-shadow: 0 1px 3px rgba(var(--shadow-ink), 0.24);
   transition: transform 160ms ease;
 }
 :root[data-theme='dark'] .themeToggleThumb {
-  transform: translateX(1.41rem);
+  transform: translateX(1.5rem);
 }
 .siteFooter {
   display: flex;
@@ -710,8 +753,8 @@ textarea::placeholder {
     transform 100ms ease;
 }
 .googleLogin:hover {
-  color: var(--on-accent);
-  background: var(--blurple);
+  color: var(--action-ink);
+  background: var(--action-bg);
   box-shadow: 0 3px 0 rgba(78, 42, 154, 0.18);
   transform: translateY(-1px);
 }
@@ -844,11 +887,8 @@ textarea::placeholder {
 .eventCardBody > .tag {
   align-self: flex-start;
 }
-.reminderToggle {
+.adminPanel {
   margin-bottom: 1.5rem;
-}
-.reminderPanel {
-  margin-top: 1rem;
   padding: clamp(1rem, 3vw, 2rem);
   border: 1px solid var(--neutral-border);
   border-radius: 0.85rem;
@@ -865,9 +905,21 @@ textarea::placeholder {
 }
 .reminderCard {
   padding: 1rem;
-  border: 1px solid var(--neutral-border);
+  border: 1px solid var(--line);
   border-radius: 0.6rem;
+  background: var(--surface-raised);
   overflow-wrap: anywhere;
+}
+.reminderTest {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.reminderPreview summary {
+  padding-block: 0.75rem;
+  color: var(--accent-ink);
 }
 .reminderHeader,
 .reminderPagination {
@@ -914,23 +966,38 @@ textarea::placeholder {
   margin-top: auto;
 }
 .eventCardBody .submissionLink {
-  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
   font-size: 0.85rem;
   font-weight: 500;
   text-underline-offset: 0.2em;
+}
+.eventCardActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
 }
 .eventCount {
   color: var(--muted);
   font-size: 0.85rem;
 }
 .viewModeSwitch {
-  display: grid;
-  gap: 0.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--line);
   font-size: 0.72rem;
   color: var(--muted);
 }
+.viewModeSwitch > span {
+  max-width: 4.5rem;
+  line-height: 1.4;
+}
 .viewModeSwitch .textButton {
-  padding: 0;
   text-align: left;
 }
 .viewModeSwitch small {
@@ -950,14 +1017,85 @@ textarea::placeholder {
   max-width: 44rem;
   margin: 0 auto;
 }
+.editorHeader {
+  margin-bottom: 1.5rem;
+}
+.editorHeader h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  letter-spacing: -0.04em;
+}
 .playlistEditorActions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
 }
 .playlistEditorTrash {
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--neutral-border);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  margin-top: 2rem;
+  border: 1px solid var(--danger-border);
+  border-radius: 0.85rem;
+}
+.playlistEditorTrash h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+.playlistEditorTrash > button {
+  flex-shrink: 0;
+}
+.trashList {
+  display: grid;
+  margin-top: 1rem;
+}
+.trashRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-block: 1rem;
+  border-top: 1px solid var(--line);
+}
+.trashCopy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.trashCopy h3 {
+  margin: 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.trashCopy p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.adminToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--soft);
+}
+.adminToolbar .kicker {
+  margin: 0;
+  color: var(--muted);
 }
 .noticeBar {
   display: flex;
@@ -1044,9 +1182,9 @@ textarea::placeholder {
 }
 .newPlaylist {
   display: grid;
-  gap: 0.75rem;
-  padding: 1rem 1.1rem;
-  border: 1px dashed var(--neutral-border);
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--line);
   border-radius: 0.85rem;
   background: var(--soft);
 }
@@ -1121,31 +1259,33 @@ textarea::placeholder {
   min-height: 3rem;
   padding: 0.8rem 1.3rem;
   font-size: 0.95rem;
-  box-shadow: 0 10px 25px rgba(117, 83, 255, 0.28);
 }
 .sharePlaylist {
   display: grid;
   width: 18rem;
   max-width: 100%;
   min-width: 0;
-  gap: 0.5rem;
 }
-.sharePlaylist [role='status'] {
-  min-height: 2.5em;
+.sharePlaylist [role='status']:not(:empty) {
+  margin-top: 0.5rem;
   color: var(--muted);
   font-size: 0.76rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
 .playlistOrder {
-  margin: 0 0 2rem;
-  padding: 1rem 1.25rem;
+  margin: 0 0 1rem;
+  padding: 0 1.25rem;
   border: 1px solid var(--line);
   border-radius: 0.85rem;
   background: var(--surface-raised);
 }
+.playlistOrder[open] {
+  padding-bottom: 1rem;
+}
 .playlistOrder summary {
-  color: var(--dark-blurple);
+  padding-block: 1rem;
+  color: var(--accent-ink);
   font-weight: 600;
 }
 .playlistOrder > .formHint {
@@ -1179,7 +1319,7 @@ textarea::placeholder {
   overflow-wrap: anywhere;
 }
 .playlistOrder li button {
-  min-width: 2.1rem;
+  min-width: 2.75rem;
   padding-inline: 0.5rem;
 }
 .compose {
@@ -1335,6 +1475,7 @@ textarea::placeholder {
   min-height: 2.75rem;
 }
 .dangerAction {
+  min-height: 2.75rem;
   padding: 0.6rem 0.85rem;
   color: var(--danger-ink);
   font-size: 0.85rem;
@@ -1412,7 +1553,7 @@ textarea::placeholder {
   gap: 0.4rem;
   justify-items: center;
   padding: 1.25rem 1rem;
-  color: var(--dark-blurple);
+  color: var(--accent-ink);
   font-size: 0.88rem;
   font-weight: 600;
   text-align: center;
@@ -1428,7 +1569,7 @@ textarea::placeholder {
   border-color: var(--blurple);
   background: var(--surface-tint-hover);
 }
-.filePicker::before {
+.filePickerIcon {
   display: grid;
   width: 2.3rem;
   height: 2.3rem;
@@ -1436,7 +1577,6 @@ textarea::placeholder {
   place-items: center;
   color: var(--on-accent);
   font-size: 1.15rem;
-  content: '↑';
   border-radius: 50%;
   background: var(--blurple);
 }
@@ -1450,7 +1590,7 @@ textarea::placeholder {
 .filePicker input::file-selector-button {
   margin-right: 0.75rem;
   padding: 0.45rem 0.75rem;
-  color: var(--dark-blurple);
+  color: var(--accent-ink);
   font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--violet-border);
@@ -1509,7 +1649,10 @@ progress::-moz-progress-bar {
   justify-content: space-between;
 }
 .backLink {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  gap: 0.35rem;
   margin-bottom: 1.1rem;
   color: var(--muted);
   font-size: 0.8rem;
@@ -1585,6 +1728,7 @@ progress::-moz-progress-bar {
 }
 .screeningStage {
   position: relative;
+  width: 100%;
   aspect-ratio: 16 / 9;
   overflow: hidden;
   background: #110b17;
@@ -1833,6 +1977,7 @@ progress::-moz-progress-bar {
 .startCard,
 .playerError {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   padding: clamp(1.5rem, 8vw, 7rem);
   align-content: center;
   justify-items: center;
@@ -1852,7 +1997,8 @@ progress::-moz-progress-bar {
   position: relative;
   z-index: 2;
   display: grid;
-  max-width: 40rem;
+  min-width: 0;
+  max-width: min(100%, 40rem);
   justify-items: center;
   animation: rise 0.5s ease-out both;
 }
@@ -1987,7 +2133,7 @@ progress::-moz-progress-bar {
   display: inline-flex;
   gap: 0.35rem;
   align-items: center;
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   padding: 0.5rem 0.7rem;
   color: #fff;
   font-size: 0.8rem;
@@ -2285,14 +2431,42 @@ kbd {
     padding: 0.75rem 1rem;
   }
   .identityActions {
+    width: 100%;
     justify-content: space-between;
-    gap: 0.75rem;
+    gap: 0.5rem;
+    flex-wrap: wrap;
   }
   .viewModeSwitch {
     flex: 1;
+    padding-left: 0.5rem;
   }
   .viewModeSwitch > span {
     display: none;
+  }
+  .overviewHeading > .actionGroup {
+    width: 100%;
+  }
+  .overviewHeading > .actionGroup > button {
+    flex: 1 1 auto;
+  }
+  .playlistEditorTrash {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .playlistHeroActions {
+    width: 100%;
+  }
+  .adminToolbar .actionGroup {
+    width: 100%;
+  }
+  .adminToolbar .actionGroup > button {
+    flex: 1 1 auto;
+  }
+  .newPlaylist input:not([type='checkbox']),
+  .newPlaylist textarea,
+  .submissionForm input,
+  .submissionForm textarea {
+    font-size: 1rem;
   }
   .identityActions .textButton {
     white-space: nowrap;
@@ -2301,8 +2475,29 @@ kbd {
   .watchPage {
     padding-inline: 1rem;
   }
+  .submissionCard {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+  .position {
+    font-size: 1rem;
+  }
+  .cardActions {
+    grid-column: 1;
+    justify-content: flex-end;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--line);
+  }
   .screeningShell {
     border-radius: 0.75rem;
+  }
+  .screeningStage {
+    min-height: 20rem;
+    aspect-ratio: 4 / 3;
+  }
+  .startCard,
+  .playerError {
+    padding: 1rem;
   }
   .titleCardFrame {
     padding: 1rem;
@@ -2336,8 +2531,8 @@ kbd {
     display: none;
   }
   .screeningStart {
-    min-height: 2.7rem;
-    margin-bottom: 0;
+    min-height: 2.75rem;
+    margin: 0.75rem 0 0;
   }
   .clipOverlay {
     right: 0.6rem;

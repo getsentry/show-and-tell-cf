@@ -56,8 +56,10 @@ export function PlaylistTrash({onRestored}: {onRestored: () => Promise<void>}) {
   }
 
   return (
-    <section className="overviewSection" aria-label="Playlist trash">
-      <h2>Trash</h2>
+    <section className="adminPanel" aria-label="Playlist trash">
+      <div className="overviewHeading">
+        <h2>Trash</h2>
+      </div>
       <p className="formHint">
         Submissions and videos are kept. Restore a playlist to make its links work again.
         Scheduled reminders resume if they are still due. Hidden and canceled shows keep
@@ -75,13 +77,11 @@ export function PlaylistTrash({onRestored}: {onRestored: () => Promise<void>}) {
       {events === null ? (
         <p>Loading trash…</p>
       ) : events.length ? (
-        <div className="eventGrid">
+        <div className="trashList">
           {events.map((event) => (
-            <article className="eventCard" key={event.id} aria-label={event.title}>
-              <div className="eventCardHero">
+            <article className="trashRow" key={event.id} aria-label={event.title}>
+              <div className="trashCopy">
                 <h3>{event.title}</h3>
-              </div>
-              <div className="eventCardBody">
                 {event.cancelledAt ? (
                   <span className="tag">Canceled</span>
                 ) : event.hidden ? (
@@ -91,13 +91,14 @@ export function PlaylistTrash({onRestored}: {onRestored: () => Promise<void>}) {
                   {event.submissionCount}{' '}
                   {event.submissionCount === 1 ? 'submission' : 'submissions'}
                 </p>
-                <button
-                  disabled={restoringId !== null}
-                  onClick={() => void restore(event)}
-                >
-                  {restoringId === event.id ? 'Restoring…' : 'Restore playlist'}
-                </button>
               </div>
+              <button
+                className="secondaryAction"
+                disabled={restoringId !== null}
+                onClick={() => void restore(event)}
+              >
+                {restoringId === event.id ? 'Restoring…' : 'Restore playlist'}
+              </button>
             </article>
           ))}
         </div>

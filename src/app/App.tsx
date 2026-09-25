@@ -17,6 +17,7 @@ import {
 import {api, json} from './api';
 import {AppFrame} from './components/AppFrame';
 import {Avatar} from './components/Avatar';
+import {ArrowIcon} from './components/ArrowIcon';
 import {ConfirmDialog} from './components/ConfirmDialog';
 import {GoogleIcon} from './components/GoogleIcon';
 import {Loader} from './components/Loader';
@@ -390,44 +391,48 @@ function ShowAndTell({
                 Show <span>&amp;</span> Tell
               </h1>
             </header>
-            {admin ? (
-              <div className="reminderToggle">
-                <button
-                  className="textAction"
-                  aria-expanded={showReminders}
-                  aria-controls="admin-reminders"
-                  onClick={() => setShowReminders((value) => !value)}
-                >
-                  {showReminders ? 'Close reminders' : 'View reminders'}
-                </button>
-                <div id="admin-reminders">{showReminders ? <ReminderList /> : null}</div>
-                <button
-                  className="textAction"
-                  aria-expanded={showTrash}
-                  aria-controls="playlist-trash"
-                  onClick={() => setShowTrash((value) => !value)}
-                >
-                  {showTrash ? 'Close trash' : 'View trash'}
-                </button>
-                <div id="playlist-trash">
-                  {showTrash ? <PlaylistTrash onRestored={loadEvents} /> : null}
-                </div>
-              </div>
-            ) : null}
             <section className="overviewSection" aria-label="Show & Tell playlists">
               <div className="overviewHeading">
                 <h2>The shows</h2>
                 {admin ? (
-                  <button
-                    className="textAction"
-                    aria-expanded={showCreate}
-                    aria-controls="new-playlist"
-                    onClick={() => setShowCreate(!showCreate)}
-                  >
-                    {showCreate ? 'Cancel new playlist' : 'New playlist'}
-                  </button>
+                  <div className="actionGroup" role="group" aria-label="Admin tools">
+                    <button
+                      className="secondaryAction"
+                      aria-expanded={showReminders}
+                      aria-controls="admin-reminders"
+                      onClick={() => setShowReminders((value) => !value)}
+                    >
+                      {showReminders ? 'Close reminders' : 'View reminders'}
+                    </button>
+                    <button
+                      className="secondaryAction"
+                      aria-expanded={showTrash}
+                      aria-controls="playlist-trash"
+                      onClick={() => setShowTrash((value) => !value)}
+                    >
+                      {showTrash ? 'Close trash' : 'View trash'}
+                    </button>
+                    <button
+                      className="primaryAction"
+                      aria-expanded={showCreate}
+                      aria-controls="new-playlist"
+                      onClick={() => setShowCreate(!showCreate)}
+                    >
+                      {showCreate ? 'Cancel new playlist' : 'New playlist'}
+                    </button>
+                  </div>
                 ) : null}
               </div>
+              {admin ? (
+                <>
+                  <div id="admin-reminders">
+                    {showReminders ? <ReminderList /> : null}
+                  </div>
+                  <div id="playlist-trash">
+                    {showTrash ? <PlaylistTrash onRestored={loadEvents} /> : null}
+                  </div>
+                </>
+              ) : null}
               {admin && showCreate ? (
                 <form
                   id="new-playlist"
@@ -502,27 +507,34 @@ function ShowAndTell({
                       >
                         Open the screening
                       </a>
-                      <a
-                        className="submissionLink"
-                        href={submissionPath(event.id, event.slug)}
-                        onClick={(click) => {
-                          if (
-                            click.button !== 0 ||
-                            click.metaKey ||
-                            click.ctrlKey ||
-                            click.shiftKey ||
-                            click.altKey
-                          )
-                            return;
-                          click.preventDefault();
-                          selectEvent(event.id, true, event.slug);
-                        }}
-                      >
-                        Upload &amp; submissions
-                      </a>
-                      {admin ? (
-                        <button onClick={() => editPlaylist(event)}>Edit playlist</button>
-                      ) : null}
+                      <div className="eventCardActions">
+                        <a
+                          className="submissionLink"
+                          href={submissionPath(event.id, event.slug)}
+                          onClick={(click) => {
+                            if (
+                              click.button !== 0 ||
+                              click.metaKey ||
+                              click.ctrlKey ||
+                              click.shiftKey ||
+                              click.altKey
+                            )
+                              return;
+                            click.preventDefault();
+                            selectEvent(event.id, true, event.slug);
+                          }}
+                        >
+                          Upload &amp; submissions
+                        </a>
+                        {admin ? (
+                          <button
+                            className="secondaryAction"
+                            onClick={() => editPlaylist(event)}
+                          >
+                            Edit playlist
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </article>
                 ))}
@@ -547,7 +559,7 @@ function ShowAndTell({
                 selectEvent(null);
               }}
             >
-              ← All shows
+              <ArrowIcon direction="left" /> All shows
             </a>
             <div className="playlistPills" role="group" aria-label="Switch playlist">
               {events.map((event) => (
@@ -589,6 +601,16 @@ function ShowAndTell({
                 {visibleSelection.event.description ? (
                   <p>{visibleSelection.event.description}</p>
                 ) : null}
+                {visibleSelection.event.cancelledAt ? (
+                  <p className="formHint" role="status">
+                    This show was canceled. Its submissions and links are still available.
+                  </p>
+                ) : visibleSelection.event.hidden ? (
+                  <p className="formHint">
+                    Hidden from the member overview. Admins can still see it, and this
+                    link still works.
+                  </p>
+                ) : null}
               </div>
               <div className="playlistHeroActions">
                 <a
@@ -606,42 +628,29 @@ function ShowAndTell({
                   eventId={visibleSelection.event.id}
                   slug={visibleSelection.event.slug}
                 />
-                {admin && !visibleSelection.event.cancelledAt ? (
-                  <button
-                    disabled={changingVisibility}
-                    onClick={() =>
-                      reportFailure(changeEventVisibility(visibleSelection.event))
-                    }
-                  >
-                    {visibleSelection.event.hidden
-                      ? 'Show on member overview'
-                      : 'Hide from member overview'}
-                  </button>
-                ) : null}
-                {admin ? (
+              </div>
+            </header>
+            {admin ? (
+              <section className="adminToolbar" aria-label="Playlist administration">
+                <p className="kicker">Admin controls</p>
+                <div className="actionGroup">
                   <button onClick={() => editPlaylist(visibleSelection.event)}>
                     Edit playlist
                   </button>
-                ) : null}
-                {visibleSelection.event.cancelledAt ? (
-                  <p className="formHint" role="status">
-                    This show was canceled. Its submissions and links are still available.
-                  </p>
-                ) : visibleSelection.event.hidden ? (
-                  <p className="formHint">
-                    Hidden from the member overview. Admins can still see it, and this
-                    link still works.
-                  </p>
-                ) : null}
-              </div>
-            </header>
-            {admin && visibleSelection.submissions.length > 1 ? (
-              <PlaylistOrder
-                key={visibleSelection.event.id}
-                eventId={visibleSelection.event.id}
-                submissions={visibleSelection.submissions}
-                onOrdered={() => requestSelected(visibleSelection.event.id)}
-              />
+                  {!visibleSelection.event.cancelledAt ? (
+                    <button
+                      disabled={changingVisibility}
+                      onClick={() =>
+                        reportFailure(changeEventVisibility(visibleSelection.event))
+                      }
+                    >
+                      {visibleSelection.event.hidden
+                        ? 'Show on member overview'
+                        : 'Hide from member overview'}
+                    </button>
+                  ) : null}
+                </div>
+              </section>
             ) : null}
             <section className="compose" aria-labelledby="compose-heading">
               <div className="composeIntro">
@@ -704,6 +713,14 @@ function ShowAndTell({
                     : 'Manage your uploads here. Open the screening to watch everyone’s videos.'}
                 </p>
               </header>
+              {admin && visibleSelection.submissions.length > 1 ? (
+                <PlaylistOrder
+                  key={visibleSelection.event.id}
+                  eventId={visibleSelection.event.id}
+                  submissions={visibleSelection.submissions}
+                  onOrdered={() => requestSelected(visibleSelection.event.id)}
+                />
+              ) : null}
               <ol
                 className={
                   admin ? 'submissionList' : 'submissionList submissionList--own'
@@ -764,6 +781,7 @@ function ShowAndTell({
                             {canManage ? (
                               <>
                                 <button
+                                  className="dangerAction"
                                   onClick={() => {
                                     setDeleteError(null);
                                     setDeleteId(submission.id);

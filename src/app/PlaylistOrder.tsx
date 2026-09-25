@@ -1,6 +1,7 @@
 import {useRef, useState} from 'react';
 import type {Submission} from '../shared/events';
 import {api, errorMessage} from './api';
+import {ArrowIcon} from './components/ArrowIcon';
 
 export function PlaylistOrder({
   eventId,
@@ -61,14 +62,14 @@ export function PlaylistOrder({
               aria-label={`Move ${entry.title} up`}
               onClick={() => void move(index, -1)}
             >
-              ↑
+              <ArrowIcon direction="up" />
             </button>
             <button
               disabled={busy || index === submissions.length - 1}
               aria-label={`Move ${entry.title} down`}
               onClick={() => void move(index, 1)}
             >
-              ↓
+              <ArrowIcon direction="down" />
             </button>
           </li>
         ))}

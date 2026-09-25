@@ -6,6 +6,7 @@ import {playlistPath, submissionPath} from '../shared/playlist';
 import type {PlaybackResponse} from '../shared/videos';
 import {api, errorMessage} from './api';
 import {AppFrame} from './components/AppFrame';
+import {ArrowIcon} from './components/ArrowIcon';
 import {PageState} from './components/Loader';
 import {SentrySymbol} from './components/SentrySymbol';
 import {
@@ -67,7 +68,7 @@ export function PlaylistPage({
             <header className="watchHeader pageHeader">
               <div>
                 <a className="backLink" href={backHref}>
-                  ← Back to submissions
+                  <ArrowIcon direction="left" /> Back to submissions
                 </a>
                 <p className="kicker">Sentry Show &amp; Tell · screening</p>
                 <h1>{data.event.title}</h1>
@@ -89,7 +90,7 @@ export function PlaylistPage({
               <PlaylistPlayer key={`${eventId}-${revision}`} data={data} />
             ) : (
               <section className="emptyState">
-                <span>∅</span>
+                <span aria-hidden="true">0</span>
                 <h2>No videos are ready</h2>
                 <p>
                   Hidden, deleted and unfinished videos stay out of the screening. Refresh
@@ -304,7 +305,16 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
             <div className="startCard" aria-live="polite">
               <Backdrop />
               <div className="startCardContent">
-                <span className="screeningMark">✓</span>
+                <span className="screeningMark" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="m5 12 4 4L19 6" />
+                  </svg>
+                </span>
                 <p className="startCardKicker">Sentry Show &amp; Tell</p>
                 <h2>That’s a wrap</h2>
                 <p>All {countLabel(count)} played. Thanks for showing and telling.</p>
@@ -352,7 +362,10 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
               disabled={state.index === 0 || state.phase === 'idle'}
               onClick={() => void controller.current?.jump(state.index - 1)}
             >
-              Previous <kbd aria-hidden="true">←</kbd>
+              Previous{' '}
+              <kbd aria-hidden="true">
+                <ArrowIcon direction="left" />
+              </kbd>
             </button>
             <button disabled={state.phase === 'loading'} onClick={toggle}>
               {toggleLabel(state.phase)} <kbd aria-hidden="true">space</kbd>
@@ -361,7 +374,10 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
               disabled={state.phase === 'complete' || state.phase === 'idle'}
               onClick={next}
             >
-              {last ? 'Finish' : 'Next'} <kbd aria-hidden="true">→</kbd>
+              {last ? 'Finish' : 'Next'}{' '}
+              <kbd aria-hidden="true">
+                <ArrowIcon direction="right" />
+              </kbd>
             </button>
           </div>
           <div className="screeningNowPlaying" aria-live="polite">
@@ -468,7 +484,7 @@ export function SharePlaylist({
   }
   return (
     <div className="sharePlaylist">
-      <button className="textAction" onClick={() => void copy()}>
+      <button className="secondaryAction" onClick={() => void copy()}>
         {kind === 'playlist' ? 'Copy screening link' : 'Copy submission link'}
       </button>
       <span role="status">{message}</span>
