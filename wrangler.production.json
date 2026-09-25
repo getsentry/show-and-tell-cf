@@ -4,6 +4,8 @@
   "account_id": "20d94f53c7cab0b469521b703ff1923c",
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-08-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "version_metadata": {"binding": "CF_VERSION_METADATA"},
   "assets": {
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",
@@ -19,6 +21,8 @@
     }
   ],
   "vars": {
+    "SENTRY_DSN": "https://c9f2309973e6b84b8de0139d13942069@o1.ingest.us.sentry.io/4512146574475264",
+    "SENTRY_ENVIRONMENT": "production",
     "APP_ORIGIN": "https://showandtell.sentry.new",
     "GOOGLE_REDIRECT_URI": "https://showandtell.sentry.new/api/auth/callback",
     "GOOGLE_CLIENT_ID": "931381634032-ekdlv1qv93lmhimm8l3l7kknvvd9sitk.apps.googleusercontent.com",

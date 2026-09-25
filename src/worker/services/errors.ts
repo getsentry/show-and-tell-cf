@@ -1,3 +1,4 @@
+import {captureException} from '@sentry/cloudflare';
 import type {ApiErrorCode, ApiErrorResponse} from '../../shared/api';
 
 export class ServiceError extends Error {
@@ -12,6 +13,8 @@ export class ServiceError extends Error {
 
 export function errorResponse(cause: unknown) {
   if (cause instanceof ServiceError) {
+    // Expected 4xx responses aren't incidents; handled storage/processing 5xx are.
+    if (cause.status >= 500) captureException(cause, {tags: {code: cause.code}});
     const response: ApiErrorResponse = {
       error: {code: cause.code, message: cause.message},
     };

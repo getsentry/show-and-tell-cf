@@ -27,6 +27,7 @@
   "dependencies": {
     "@cloudflare/containers": "0.3.7",
     "@fontsource/rubik": "^5.3.0",
+    "@sentry/cloudflare": "^11.0.0",
     "hono": "^4.13.5",
     "jose": "^6.2.12",
     "react": "^19.2.4",

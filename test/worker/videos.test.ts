@@ -1,4 +1,4 @@
-import {env, SELF} from 'cloudflare:test';
+import {env, SELF, createExecutionContext, waitOnExecutionContext} from 'cloudflare:test';
 import worker from '../../src/worker';
 import {beforeEach, describe, expect, it} from 'vitest';
 
@@ -98,10 +98,13 @@ describe('R2 multipart video lifecycle', () => {
       method: 'DELETE',
     });
     await expireUpload(uploadId);
+    const ctx = createExecutionContext();
     await worker.scheduled(
       {scheduledTime: Date.now(), cron: '17 * * * *', noRetry() {}},
       env,
+      ctx,
     );
+    await waitOnExecutionContext(ctx);
     expect(
       await env.DB.prepare('SELECT status FROM video_uploads WHERE id = ?')
         .bind(uploadId)

@@ -1,4 +1,14 @@
+import {
+  captureException,
+  instrumentWorkflowWithSentry,
+  setUser,
+  setAttribute,
+  withSentry,
+} from '@sentry/cloudflare';
 import {Hono} from 'hono';
+import {HTTPException} from 'hono/http-exception';
+import {sentryOptions, type SentryEnv} from './sentry';
+import {VideoProcessingWorkflow as ProcessingWorkflow} from './workflows/video-processing';
 import {
   authenticateRequest,
   protectMutationOrigin,
@@ -22,15 +32,31 @@ import {
 // Required by the Containers SDK for the processor's scoped R2 outbound handler.
 export {ContainerProxy} from '@cloudflare/containers';
 export {VideoProcessorContainer} from './containers/video-processor';
-export {VideoProcessingWorkflow} from './workflows/video-processing';
+// Keep explicit wrappers: production Wrangler builds the source entry directly.
+export type VideoProcessingWorkflow = ProcessingWorkflow;
+export const VideoProcessingWorkflow = instrumentWorkflowWithSentry(
+  sentryOptions,
+  ProcessingWorkflow,
+);
 
 export type WorkerEnv = {
-  Bindings: Omit<Env, keyof ReminderEnv> &
+  Bindings: Omit<Env, keyof ReminderEnv | keyof SentryEnv> &
     ReminderEnv &
+    SentryEnv &
     AuthBindings & {ASSETS: Fetcher; DB: D1Database};
   Variables: AuthVariables;
 };
 export const app = new Hono<WorkerEnv>();
+app.onError((error, c) => {
+  // Hono turns exceptions into responses, so the outer Worker wrapper never sees them.
+  if (error instanceof HTTPException) {
+    if (error.status >= 500) captureException(error);
+    return error.getResponse();
+  }
+  captureException(error);
+  console.error(error);
+  return c.text('Internal Server Error', 500);
+});
 // Canonicalize before auth or assets so cookies and Google callbacks use one host.
 app.use('*', async (c, next) => {
   const url = new URL(c.req.url);
@@ -45,6 +71,12 @@ app.use('*', async (c, next) => {
 app.get('/api/health', (c) => c.json({ok: true}));
 app.route('/api/auth', authRoutes);
 app.use('/api/*', authenticateRequest<WorkerEnv>());
+app.use('/api/*', async (c, next) => {
+  const user = c.get('user');
+  setUser({id: user.id, email: user.email, username: user.displayName});
+  setAttribute('user.role', user.role);
+  await next();
+});
 app.use('/api/*', protectMutationOrigin<WorkerEnv>());
 app.route('/api/auth', authenticatedAuthRoutes);
 app.route('/api/session', sessionRoutes);
@@ -55,9 +87,13 @@ app.route('/api/submissions', submissionVideoRoutes);
 app.route('/api/videos', videosRoutes);
 app.get('/api/admin/session', requireRole('admin'), (c) => c.json({user: c.get('user')}));
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
-export default {
+export default withSentry(sentryOptions, {
   fetch: app.fetch,
-  async scheduled(_event: ScheduledController, env: ReminderEnv & Pick<Env, 'VIDEOS'>) {
+  async scheduled(
+    _event: ScheduledController,
+    env: ReminderEnv & Pick<Env, 'VIDEOS'> & SentryEnv,
+    _ctx: ExecutionContext,
+  ) {
     const results = await Promise.allSettled([
       reapExpiredMultipartVideoUploads(env.DB, env.VIDEOS),
       processShowReminders(env),
@@ -75,4 +111,4 @@ export default {
         'Scheduled maintenance or reminders failed; inspect delivery status',
       );
   },
-};
+});
