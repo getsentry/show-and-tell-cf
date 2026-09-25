@@ -11,6 +11,7 @@ import type {
 } from '../shared/videos';
 import {api, errorMessage, json} from './api';
 import {ConfirmDialog} from './components/ConfirmDialog';
+import {ArrowIcon} from './components/ArrowIcon';
 import {
   checkRememberedFile,
   forgetFile,
@@ -438,6 +439,9 @@ export function VideoPanel({
           ) : null}
           {!allPartsUploaded && !expired ? (
             <label className="filePicker" htmlFor={id}>
+              <span className="filePickerIcon">
+                <ArrowIcon direction="up" />
+              </span>
               {upload ? 'Select original video' : 'Choose video'}
               <input
                 key={inputKey}

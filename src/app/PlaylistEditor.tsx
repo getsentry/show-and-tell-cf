@@ -74,7 +74,10 @@ export function PlaylistEditor({
 
   return (
     <section className="playlistEditor" aria-label="Edit playlist">
-      <h2>Edit Playlist</h2>
+      <header className="editorHeader">
+        <p className="kicker">Admin controls</p>
+        <h1>Edit Playlist</h1>
+      </header>
       <form
         className="newPlaylist"
         aria-label="Edit playlist"
@@ -113,6 +116,9 @@ export function PlaylistEditor({
           </p>
         ) : null}
         <div className="playlistEditorActions">
+          <button type="button" disabled={busy} onClick={onCancel}>
+            Cancel
+          </button>
           <button
             className="primaryAction"
             type="submit"
@@ -120,17 +126,16 @@ export function PlaylistEditor({
           >
             {busy && !confirmTrash ? 'Saving…' : 'Save changes'}
           </button>
-          <button type="button" disabled={busy} onClick={onCancel}>
-            Cancel
-          </button>
         </div>
       </form>
       <div className="playlistEditorTrash">
-        <h3>Trash Playlist</h3>
-        <p className="formHint">
-          Remove this playlist without deleting its submissions or videos. Admins can
-          restore it from Trash.
-        </p>
+        <div>
+          <h2>Trash Playlist</h2>
+          <p className="formHint">
+            Remove this playlist without deleting its submissions or videos. Admins can
+            restore it from Trash.
+          </p>
+        </div>
         <button
           className="dangerAction"
           disabled={busy}

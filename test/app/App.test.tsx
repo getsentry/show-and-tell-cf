@@ -1,5 +1,13 @@
 import '@testing-library/jest-dom/vitest';
-import {act, cleanup, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {App, defaultPlaylistTitle} from '../../src/app/App';
@@ -12,6 +20,88 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('groups overview admin tools without fetching closed panels', async () => {
+    const fetcher = vi.fn(async (url: string) => {
+      if (url === '/api/session') return jsonResponse({user: admin});
+      if (url === '/api/events') return jsonResponse({events: [october]});
+      if (url === '/api/events?trash=true') return jsonResponse({events: []});
+      throw new Error(url);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<App />);
+    const tools = await screen.findByRole('group', {name: 'Admin tools'});
+    expect(
+      within(tools)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['View reminders', 'View trash', 'New playlist']);
+    expect(
+      fetcher.mock.calls.some(
+        ([url]) => url.includes('reminders') || url.includes('trash'),
+      ),
+    ).toBe(false);
+    fireEvent.click(within(tools).getByRole('button', {name: 'View trash'}));
+    expect(await screen.findByText('Trash is empty.')).toBeInTheDocument();
+    expect(within(tools).getByRole('button', {name: 'Close trash'})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(within(tools).queryByRole('region')).not.toBeInTheDocument();
+    fireEvent.click(within(tools).getByRole('button', {name: 'Close trash'}));
+    expect(
+      screen.queryByRole('region', {name: 'Playlist trash'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each(['admin', 'member'])(
+    'keeps playlist administration separate in %s view',
+    async (role) => {
+      const other = {...submission, id: 'other', title: 'Other demo'};
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => {
+          if (url === '/api/session') return jsonResponse({user: {...admin, role}});
+          if (url === '/api/events') return jsonResponse({events: [october]});
+          if (url === '/api/events/october')
+            return jsonResponse(detailFor(october, [submission, other]));
+          if (url.endsWith('/video/upload')) return Response.json({upload: null});
+          if (url.endsWith('/video')) return Response.json({video: null});
+          throw new Error(url);
+        }),
+      );
+      render(<App />);
+      await screen.findByRole('link', {name: 'Upload & submissions'});
+      if (role === 'member')
+        expect(
+          screen.queryByRole('group', {name: 'Admin tools'}),
+        ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('link', {name: 'Upload & submissions'}));
+      await screen.findByRole('heading', {name: 'What are you showing?'});
+      if (role === 'admin') {
+        const controls = screen.getByRole('region', {name: 'Playlist administration'});
+        expect(
+          within(controls).getByRole('button', {name: 'Edit playlist'}),
+        ).toBeInTheDocument();
+        expect(
+          within(controls).getByRole('button', {name: 'Hide from member overview'}),
+        ).toBeInTheDocument();
+        expect(
+          within(controls).queryByRole('link', {name: 'Open the screening'}),
+        ).not.toBeInTheDocument();
+        const lineup = screen.getByRole('region', {name: '2 submissions'});
+        expect(within(lineup).getByText('Arrange playlist')).toBeInTheDocument();
+      } else {
+        expect(
+          screen.queryByRole('region', {name: 'Playlist administration'}),
+        ).not.toBeInTheDocument();
+        expect(screen.queryByText('Arrange playlist')).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole('button', {name: 'Edit playlist'}),
+        ).not.toBeInTheDocument();
+      }
+    },
+  );
+
   it.each(['member', 'admin'])(
     'labels the %s submission list and keeps ordering admin-only',
     async (role) => {
@@ -211,7 +301,7 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('link', {name: 'Upload & submissions'}));
     await screen.findByRole('form', {name: 'Create submission'});
     expect(screen.queryByRole('button', {name: 'Move to trash'})).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('link', {name: '← All shows'}));
+    fireEvent.click(screen.getByRole('link', {name: 'All shows'}));
     expect(screen.queryByRole('button', {name: 'View trash'})).not.toBeInTheDocument();
     expect(screen.queryByRole('button', {name: 'Edit playlist'})).not.toBeInTheDocument();
   });
@@ -322,7 +412,7 @@ describe('App', () => {
     ).toBeInTheDocument();
     expect(window.location.pathname).toBe('/events/november');
     expect(screen.queryByRole('button', {name: 'New playlist'})).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('link', {name: '← All shows'}));
+    fireEvent.click(screen.getByRole('link', {name: 'All shows'}));
     expect(window.location.pathname).toBe('/');
     expect(
       screen.queryByRole('form', {name: 'Create submission'}),

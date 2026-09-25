@@ -35,10 +35,13 @@ export function ReminderList() {
     return () => controller.abort();
   }, [offset, revision]);
   return (
-    <section className="reminderPanel" aria-label="Scheduled reminders">
+    <section className="adminPanel" aria-label="Scheduled reminders">
       <div className="overviewHeading">
         <h2>Reminders</h2>
-        <button className="textAction" onClick={() => setRevision((value) => value + 1)}>
+        <button
+          className="secondaryAction"
+          onClick={() => setRevision((value) => value + 1)}
+        >
           Refresh reminders
         </button>
       </div>

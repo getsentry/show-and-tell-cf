@@ -37,36 +37,38 @@ export function TestEmailButton({eventId}: {eventId: string}) {
   }
 
   return (
-    <div>
+    <div className="reminderTest">
       <p className="formHint">
         Sends a [TEST] email only to your signed-in Sentry address. Scheduled reminders
         stay unchanged.
       </p>
-      <button
-        disabled={busy || status === 'sent' || status === 'uncertain'}
-        onClick={() => void send()}
-      >
-        {requestId.current ? 'Check test attempt' : 'Send test to me'}
-      </button>
-      {requestId.current ? (
+      <div className="actionGroup">
         <button
-          disabled={busy}
-          onClick={() => {
-            if (
-              !window.confirm(
-                'Start another test? Check your inbox first; the previous email may already have arrived.',
-              )
-            )
-              return;
-            requestId.current = null;
-            setStatus(null);
-            setNotice('');
-            setError('');
-          }}
+          disabled={busy || status === 'sent' || status === 'uncertain'}
+          onClick={() => void send()}
         >
-          Start another test
+          {requestId.current ? 'Check test attempt' : 'Send test to me'}
         </button>
-      ) : null}
+        {requestId.current ? (
+          <button
+            disabled={busy}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  'Start another test? Check your inbox first; the previous email may already have arrived.',
+                )
+              )
+                return;
+              requestId.current = null;
+              setStatus(null);
+              setNotice('');
+              setError('');
+            }}
+          >
+            Start another test
+          </button>
+        ) : null}
+      </div>
       {notice ? <p role="status">{notice}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
     </div>
