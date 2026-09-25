@@ -59,7 +59,7 @@ Coverage includes Worker requests, unexpected Hono exceptions, handled API 5xx e
 
 This is intentionally permissive and may send personal data and application content to Sentry. Built-in sensitive-key filtering remains enabled for structured data, but does not guarantee removal of secrets from raw body strings, logs, or exception messages. Review project-side scrubbing and retention accordingly. Incoming textual bodies use the SDK's maximum supported capture setting (1 MiB cap); binary video bodies are skipped by the SDK. Collection flags do not create integrations for services the application does not use or bypass runtime limitations. Browser replay/profiling require a browser SDK, direct Node container instrumentation remains separate, and source-map uploads require build credentials/configuration.
 
-The Worker and Workflow use explicit wrappers because production Wrangler builds `src/worker/index.ts` directly, rather than deploying Vite's Worker output. Both Wrangler configs enable `nodejs_compat`. After an approved deployment, verify an intentional test failure in the Sentry project and remove the test trigger. Do not add a public debug-error endpoint. Regression tests use local SDK interception and Cloudflare Workflow fault injection; they do not send to the production DSN.
+The Worker and Workflow use explicit wrappers because production Wrangler builds `src/worker/index.ts` directly, rather than deploying Vite's Worker output. Both Wrangler configs enable `nodejs_compat`. After an approved deployment, verify an intentional test failure in the Sentry project and remove the test trigger. Do not add a public debug-error endpoint.
 
 ## Quality gates
 
