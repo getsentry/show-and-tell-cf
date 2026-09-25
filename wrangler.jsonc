@@ -3,6 +3,8 @@
   "name": "show-and-tell-cf",
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-08-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "version_metadata": {"binding": "CF_VERSION_METADATA"},
   "assets": {
     "not_found_handling": "single-page-application",
     "binding": "ASSETS",
@@ -17,6 +19,8 @@
     },
   ],
   "vars": {
+    "SENTRY_DSN": "",
+    "SENTRY_ENVIRONMENT": "development",
     "APP_ORIGIN": "http://localhost:5173",
     "GOOGLE_REDIRECT_URI": "http://localhost:5173/api/auth/callback",
     "GOOGLE_CLIENT_ID": "configure-me.apps.googleusercontent.com",

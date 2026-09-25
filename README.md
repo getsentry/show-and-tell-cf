@@ -47,6 +47,18 @@ The canonical domain and Google login have been verified. D1 is the role authori
 
 **Rollout approval required:** deploying the playlist PR applies additive D1 migration `0005_playlist_playback.sql`, updates the Worker, and provisions the legacy custom domain/DNS/certificate via Wrangler. The existing canonical custom domain is retained. Ensure the Workers Builds token can manage custom domains in the `sentry.new` zone as well as deploy Workers and migrate D1. Do not merge/deploy until the Cloudflare writes are approved. No separate redirect Worker or R2 public access is needed. After deployment/TLS issuance, check `curl -I 'https://showntell.sentry.new/playlists/<event-id>?view=screen'` returns a 308 to the matching canonical URL.
 
+## Error Monitoring
+
+This repository uses `@sentry/cloudflare` v11. [Sentry issues](https://sentry.sentry.io/organizations/sentry/issues/?project=4512146574475264&statsPeriod=14d) are in organization `sentry`, project ID `4512146574475264`.
+
+The supplied public DSN is configured as `SENTRY_DSN` in `wrangler.production.json`, with environment `production`. Local development and tests leave the DSN empty, so they do not send events. To test delivery locally, set `SENTRY_DSN` in `.dev.vars` and use the `development` environment. No Sentry auth token is needed for runtime ingestion.
+
+Coverage includes Worker requests, unexpected Hono exceptions, handled API 5xx errors, scheduled failures, and the video conversion Workflow. Workflow failures include video ID, processing attempt, and stage (`claim`, `processor`, `publication`, or container cleanup). FFmpeg errors returned by the isolated Node container, container startup/fetch failures, invalid output, and publication failures are reported at the Workflow boundary. Capacity waits and stale attempts are not errors; existing retries and failure-state writes remain unchanged. The processor retains its restricted network access and does not send directly to Sentry. Browser playback errors and standalone container lifecycle errors are not instrumented by this server-side setup.
+
+`src/worker/sentry.ts` configures 10% tracing, Cloudflare version IDs as releases, and explicit v11 `dataCollection` limits: no user identity, cookies, HTTP headers/bodies, query parameters, or database values. Error messages and stacks still reach Sentry; do not attach video contents, credentials, or email bodies to exceptions. Logs, replay, and source-map uploads to Sentry are not enabled. Source-map uploads require separate build credentials/configuration.
+
+The Worker and Workflow use explicit wrappers because production Wrangler builds `src/worker/index.ts` directly, rather than deploying Vite's Worker output. Both Wrangler configs enable `nodejs_compat`. After an approved deployment, verify an intentional test failure in the Sentry project and remove the test trigger. Do not add a public debug-error endpoint. Regression tests use local SDK interception and Cloudflare Workflow fault injection; they do not send to the production DSN.
+
 ## Quality gates
 
 ```bash

@@ -1,4 +1,9 @@
-import {env, createScheduledController} from 'cloudflare:test';
+import {
+  env,
+  createScheduledController,
+  createExecutionContext,
+  waitOnExecutionContext,
+} from 'cloudflare:test';
 import worker from '../../src/worker';
 import {beforeEach, afterEach, expect, it, vi} from 'vitest';
 import {
@@ -64,9 +69,15 @@ it.each([
     await expect(processShowReminders(bindings, now)).rejects.toThrow(
       'Configure an HTTPS APP_ORIGIN before enabling reminders',
     );
+    const ctx = createExecutionContext();
     await expect(
-      worker.scheduled(createScheduledController(), {...bindings, VIDEOS: env.VIDEOS}),
+      worker.scheduled(
+        createScheduledController(),
+        {...bindings, VIDEOS: env.VIDEOS},
+        ctx,
+      ),
     ).rejects.toThrow('Configure an HTTPS APP_ORIGIN before enabling reminders');
+    await waitOnExecutionContext(ctx);
     expect(
       await env.DB.prepare(
         "SELECT is_hidden FROM show_and_tell_events WHERE id='show'",

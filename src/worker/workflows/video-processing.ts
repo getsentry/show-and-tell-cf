@@ -1,4 +1,6 @@
 import {getContainer} from '@cloudflare/containers';
+import {captureException, setAttributes, setTags} from '@sentry/cloudflare';
+import type {SentryEnv} from '../sentry';
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -26,7 +28,7 @@ import {
   type VideoProcessorResult,
 } from '../video-processing';
 
-export interface VideoProcessingEnvironment {
+export interface VideoProcessingEnvironment extends SentryEnv {
   DB: D1Database;
   VIDEOS: R2Bucket;
   VIDEO_PROCESSOR: DurableObjectNamespace<VideoProcessorContainer>;
@@ -39,6 +41,21 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
 > {
   async run(event: WorkflowEvent<VideoProcessingParams>, step: WorkflowStep) {
     const {videoId, attempt} = event.payload;
+    setTags({component: 'video-processing', videoId, attempt: String(attempt)});
+    setAttributes({'video.id': videoId, 'video.processing_attempt': attempt});
+    try {
+      return await this.process(event, step);
+    } catch (error) {
+      // The SDK captures step callback failures; also cover failures outside a
+      // callback (for example platform timeouts, sleeps, or workflow bookkeeping).
+      captureException(error);
+      throw error;
+    }
+  }
+
+  private async process(event: WorkflowEvent<VideoProcessingParams>, step: WorkflowStep) {
+    const {videoId, attempt} = event.payload;
+    setTags({'video.stage': 'claim'});
     let claim: Exclude<
       Awaited<ReturnType<typeof claimVideoProcessingAttempt>>,
       {status: 'capacity'}
@@ -61,6 +78,7 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
             ),
         );
       } catch (error) {
+        captureException(error);
         const message = errorMessage(error);
         logVideoProcessing('error', 'claim_failed', {videoId, attempt, message});
         await step.do('record claim failure', () =>
@@ -82,6 +100,7 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
     }
     logVideoProcessing('info', 'processing_started', {videoId, attempt});
 
+    setTags({'video.stage': 'processor'});
     let result: VideoProcessorResult;
     for (;;) {
       let outcome:
@@ -126,6 +145,7 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
           },
         );
       } catch (error) {
+        captureException(error);
         const message = errorMessage(error);
         logVideoProcessing('error', 'processor_failed', {videoId, attempt, message});
         await step.do('record processor failure', () =>
@@ -145,6 +165,7 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
       break;
     }
 
+    setTags({'video.stage': 'publication'});
     let published: boolean;
     try {
       published = await step.do('publish only if attempt is current', async () => {
@@ -167,6 +188,7 @@ export class VideoProcessingWorkflow extends WorkflowEntrypoint<
         );
       });
     } catch (error) {
+      captureException(error);
       await step.do('record publication failure', () =>
         failVideoProcessingAttempt(this.env.DB, videoId, attempt, errorMessage(error)),
       );
@@ -200,6 +222,7 @@ async function destroyProcessorContainer(
   try {
     await container.destroy();
   } catch (error) {
+    captureException(error, {tags: {'video.stage': 'container_destroy'}});
     logVideoProcessing('error', 'container_destroy_failed', {
       videoId,
       attempt,
@@ -208,6 +231,7 @@ async function destroyProcessorContainer(
     try {
       await container.stop();
     } catch (stopError) {
+      captureException(stopError, {tags: {'video.stage': 'container_stop'}});
       logVideoProcessing('error', 'container_stop_failed', {
         videoId,
         attempt,

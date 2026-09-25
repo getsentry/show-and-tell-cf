@@ -3,3 +3,6 @@ GOOGLE_CLIENT_ID=<non-secret-client-id>
 GOOGLE_CLIENT_SECRET=<secret-never-commit>
 GOOGLE_REDIRECT_URI="http://localhost:5173/api/auth/callback"
 ALLOWED_EMAIL_DOMAIN="sentry.io"
+# Optional local Sentry delivery; empty keeps development errors out of Sentry.
+SENTRY_DSN=""
+SENTRY_ENVIRONMENT="development"
