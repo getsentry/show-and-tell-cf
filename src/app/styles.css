@@ -1244,6 +1244,9 @@ textarea::placeholder {
   box-shadow: 0 1px 2px rgba(var(--shadow-ink), 0.04);
   animation: rise 0.3s ease-out both;
 }
+.submissionList--own .submissionCard {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
 .submissionCard.hidden {
   border-style: dashed;
   border-color: var(--neutral-border);
@@ -2235,6 +2238,12 @@ kbd {
   .submissionCard {
     grid-template-columns: 2.25rem minmax(0, 1fr);
     padding: 1.1rem 1.15rem;
+  }
+  .submissionList--own .submissionCard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .submissionList--own .cardActions {
+    grid-column: 1;
   }
   .cardActions {
     flex-direction: row;

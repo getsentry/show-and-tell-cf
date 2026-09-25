@@ -252,11 +252,21 @@ describe('playlist playback and ordering', () => {
     await env.DB.prepare("UPDATE submissions SET is_hidden = 1 WHERE id = 'b'").run();
     expect((await order(['a', 'b', 'c'], ['c', 'b', 'a'])).status).toBe(204);
     expect(await ids()).toEqual(['c', 'b', 'a']);
+    const memberDetail = await (await request('event', member)).json<EventResponse>();
+    expect(memberDetail.submissions).toEqual([]);
+    expect(memberDetail.event.submissionCount).toBe(0);
     const response = await request('event/playlist', member);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(
       (await response.json<PlaylistResponse>()).items.map((item) => item.submissionId),
     ).toEqual(['c', 'a']);
+    expect(
+      (await (await request('event/playlist', admin)).json<PlaylistResponse>()).items.map(
+        (item) => item.submissionId,
+      ),
+    ).toEqual(['c', 'a']);
+    expect((await request('event/playlist/video-c/playback', member)).status).toBe(200);
+    expect((await order(['c', 'b', 'a'], ['a', 'b', 'c'], member)).status).toBe(403);
     expect((await order(['a', 'b', 'c'], ['b', 'a', 'c'])).status).toBe(409);
     expect(await ids()).toEqual(['c', 'b', 'a']);
   });

@@ -354,6 +354,77 @@ describe('events and submissions', () => {
     });
   });
 
+  it('lists and counts only own submissions for members, including hidden entries', async () => {
+    const admin = await userCookie('admin', true);
+    const owner = await userCookie('owner', false);
+    const other = await userCookie('other', false);
+    const newcomer = await userCookie('newcomer', false);
+    const eventId = await createEvent(admin.cookie);
+    await env.DB.batch(
+      [
+        ['own-visible', owner.id, 0, null],
+        ['own-hidden', owner.id, 1, null],
+        ['own-deleted', owner.id, 0, '2026-09-24'],
+        ['other-visible', other.id, 0, null],
+        ['other-hidden', other.id, 1, null],
+        ['admin-own', admin.id, 0, null],
+      ].map(([id, creatorId, hidden, deletedAt]) =>
+        env.DB.prepare(
+          "INSERT INTO submissions (id, event_id, creator_id, title, is_hidden, deleted_at, created_at) VALUES (?, ?, ?, ?, ?, ?, '2026-09-24')",
+        ).bind(id, eventId, creatorId, id, hidden, deletedAt),
+      ),
+    );
+    for (const [cookie, expectedIds] of [
+      [owner.cookie, ['own-hidden', 'own-visible']],
+      [other.cookie, ['other-hidden', 'other-visible']],
+      [newcomer.cookie, []],
+      [
+        admin.cookie,
+        ['admin-own', 'other-hidden', 'other-visible', 'own-hidden', 'own-visible'],
+      ],
+    ] as const) {
+      const detail = await request(`/api/events/${eventId}`, cookie, 'GET');
+      expect(detail.status).toBe(200);
+      expect(detail.headers.get('Cache-Control')).toBe('private, no-store');
+      const body = await detail.json<{
+        event: {submissionCount: number};
+        submissions: {id: string}[];
+      }>();
+      expect(body.submissions.map((entry) => entry.id)).toEqual(expectedIds);
+      expect(body.event.submissionCount).toBe(expectedIds.length);
+      const overview = await request('/api/events', cookie, 'GET');
+      expect(overview.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(await overview.json()).toMatchObject({
+        events: [{id: eventId, submissionCount: expectedIds.length}],
+      });
+    }
+    await request('/api/session/view-mode', admin.cookie, 'POST', {mode: 'member'});
+    expect(
+      await (await request(`/api/events/${eventId}`, admin.cookie, 'GET')).json(),
+    ).toMatchObject({
+      event: {submissionCount: 1},
+      submissions: [{id: 'admin-own'}],
+    });
+    expect(
+      await (await request('/api/events', admin.cookie, 'GET')).json(),
+    ).toMatchObject({
+      events: [{id: eventId, submissionCount: 1}],
+    });
+    await request('/api/session/view-mode', admin.cookie, 'POST', {mode: 'admin'});
+    expect(
+      await (await request(`/api/events/${eventId}`, admin.cookie, 'GET')).json(),
+    ).toMatchObject({
+      event: {submissionCount: 5},
+      submissions: [
+        {id: 'admin-own'},
+        {id: 'other-hidden'},
+        {id: 'other-visible'},
+        {id: 'own-hidden'},
+        {id: 'own-visible'},
+      ],
+    });
+  });
+
   it('enforces ownership for deletion and admin-only visibility', async () => {
     const admin = await userCookie('admin', true);
     const owner = await userCookie('owner', false);

@@ -494,6 +494,7 @@ function ShowAndTell({
                       <p className="eventCount">
                         {event.submissionCount}{' '}
                         {event.submissionCount === 1 ? 'submission' : 'submissions'}
+                        {admin ? '' : ' from you'}
                       </p>
                       <a
                         className="primaryAction primaryAction--play"
@@ -563,6 +564,7 @@ function ShowAndTell({
                   <span>
                     {event.submissionCount}{' '}
                     {event.submissionCount === 1 ? 'submission' : 'submissions'}
+                    {admin ? '' : ' from you'}
                   </span>
                 </button>
               ))}
@@ -688,7 +690,7 @@ function ShowAndTell({
             <section className="lineup" aria-labelledby="lineup-heading">
               <header className="lineupHeader">
                 <div>
-                  <p className="kicker">Lineup</p>
+                  <p className="kicker">{admin ? 'Lineup' : 'Your submissions'}</p>
                   <h2 id="lineup-heading">
                     {visibleSelection.submissions.length}{' '}
                     {visibleSelection.submissions.length === 1
@@ -697,11 +699,16 @@ function ShowAndTell({
                   </h2>
                 </div>
                 <p>
-                  Videos play in this order.
-                  {admin ? ' Use Arrange playlist to change it.' : ''}
+                  {admin
+                    ? 'Videos play in this order. Use Arrange playlist to change it.'
+                    : 'Manage your uploads here. Open the screening to watch everyone’s videos.'}
                 </p>
               </header>
-              <ol className="submissionList">
+              <ol
+                className={
+                  admin ? 'submissionList' : 'submissionList submissionList--own'
+                }
+              >
                 {visibleSelection.submissions.map((submission, index) => {
                   const canManage = admin || submission.creatorId === user.id;
                   return (
@@ -714,9 +721,11 @@ function ShowAndTell({
                         tabIndex={-1}
                         aria-label={submission.title}
                       >
-                        <span className="position" aria-hidden="true">
-                          {String(index + 1).padStart(2, '0')}
-                        </span>
+                        {admin ? (
+                          <span className="position" aria-hidden="true">
+                            {String(index + 1).padStart(2, '0')}
+                          </span>
+                        ) : null}
                         <div className="submissionBody">
                           <div className="submissionByline">
                             <Avatar
@@ -786,7 +795,7 @@ function ShowAndTell({
               {!visibleSelection.submissions.length ? (
                 <section className="emptyState">
                   <span>00</span>
-                  <h2>No videos yet</h2>
+                  <h2>{admin ? 'No videos yet' : 'No submissions yet'}</h2>
                   <p>Create a submission above, then upload your video.</p>
                 </section>
               ) : null}

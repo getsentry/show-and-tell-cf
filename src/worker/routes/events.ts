@@ -34,7 +34,7 @@ eventRoutes.get('/', async (c) => {
       COUNT(s.id) submission_count
      FROM show_and_tell_events e
      LEFT JOIN submissions s ON s.event_id = e.id AND s.deleted_at IS NULL
-       AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
+       AND (? = 'admin' OR s.creator_id = ?)
      WHERE (e.is_hidden = 0 OR ? = 'admin')
        AND ((? = 1 AND e.trashed_at IS NOT NULL)
          OR (? = 0 AND e.trashed_at IS NULL AND e.cancelled_at IS NULL))
@@ -49,7 +49,7 @@ eventRoutes.get('/', async (c) => {
     )
     .all<EventRow>();
   const response: EventsResponse = {events: result.results.map(toEvent)};
-  return c.json(response);
+  return c.json(response, 200, {'Cache-Control': 'private, no-store'});
 });
 
 eventRoutes.post('/', requireRole('admin'), async (c) => {
@@ -185,13 +185,13 @@ eventRoutes.get('/:eventId', async (c) => {
       s.title, s.description, s.is_hidden, s.created_at
      FROM submissions s JOIN users u ON u.id = s.creator_id
      WHERE s.event_id = ? AND s.deleted_at IS NULL
-       AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
+       AND (? = 'admin' OR s.creator_id = ?)
      ORDER BY s.playlist_position, s.created_at, s.id`,
   )
     .bind(c.req.param('eventId'), c.get('user').role, c.get('user').id)
     .all<SubmissionRow>();
   const response: EventResponse = {event, submissions: result.results.map(toSubmission)};
-  return c.json(response);
+  return c.json(response, 200, {'Cache-Control': 'private, no-store'});
 });
 
 eventRoutes.post('/:eventId/submissions', async (c) => {
@@ -276,7 +276,7 @@ async function getEvent(db: D1Database, id: string, role: string, userId: string
       COUNT(s.id) submission_count
      FROM show_and_tell_events e LEFT JOIN submissions s
        ON s.event_id = e.id AND s.deleted_at IS NULL
-         AND (s.is_hidden = 0 OR ? = 'admin' OR s.creator_id = ?)
+         AND (? = 'admin' OR s.creator_id = ?)
      WHERE e.id = ? AND e.trashed_at IS NULL GROUP BY e.id`,
     )
     .bind(role, userId, id)
