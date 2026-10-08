@@ -110,7 +110,7 @@ The email binding must permit the admin's test address in addition to the schedu
 
 Edit `src/shared/email-template.ts` to change the email copy or layout. There is no editor or database template. Scheduled delivery, previews and personal tests use the same HTML/plain-text renderer.
 
-The email includes the submission link, linked newcomer guide, help contacts, and DST-correct San Francisco, New York and Vienna start times. Demos are under five minutes; there is no submission deadline. After changing the copy, send yourself a test email and inspect it in your mail client.
+The email includes the submission link, linked newcomer guide, help contacts, and DST-correct San Francisco, Toronto and Vienna start times. Demos are under five minutes; there is no submission deadline. After changing the copy, send yourself a test email and inspect it in your mail client.
 
 ## Implementation Map
 
