@@ -78,6 +78,10 @@ describe('playlist page', () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', {name: /Refresh/i})).not.toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Copy screening link'})).toBeInTheDocument();
+    expect(screen.getByRole('link', {name: 'Download Demo b'})).toHaveAttribute(
+      'href',
+      '/api/videos/b/download',
+    );
     expect(screen.getByRole('region', {name: 'Screening player'})).toBeInTheDocument();
     expect(play).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', {name: 'Play all'}));
