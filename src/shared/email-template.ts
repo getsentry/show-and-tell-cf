@@ -36,7 +36,7 @@ function showSchedule(date: Date) {
   const day = dateIn('America/Los_Angeles');
   const rows = [
     ['America/Los_Angeles', 'San Francisco'],
-    ['America/New_York', 'New York'],
+    ['America/Toronto', 'Toronto'],
     ['Europe/Vienna', 'Vienna'],
   ].map(([timeZone, city]) => {
     const time = new Intl.DateTimeFormat('en-US', {
