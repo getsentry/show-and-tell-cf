@@ -4,6 +4,7 @@ export interface PlaylistItem {
   title: string;
   description: string | null;
   creatorName: string;
+  creatorAvatarUrl: string | null;
   durationSeconds: number;
 }
 

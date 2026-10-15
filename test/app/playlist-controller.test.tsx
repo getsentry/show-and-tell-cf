@@ -12,6 +12,7 @@ const items: PlaylistItem[] = ['a', 'b', 'c'].map((id) => ({
   title: id,
   description: null,
   creatorName: 'Demo team',
+  creatorAvatarUrl: null,
   durationSeconds: 30,
 }));
 const playback = (id: string): PlaybackResponse => ({

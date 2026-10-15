@@ -22,7 +22,8 @@ playlistRoutes.get('/:eventId/playlist', async (c) => {
   // Playback/content routes independently re-check authentication and visibility.
   const {results} = await c.env.DB.prepare(
     `SELECT s.id submissionId, v.id videoId, s.title, s.description,
-       u.display_name creatorName, COALESCE(v.duration_seconds, 0) durationSeconds
+       u.display_name creatorName, u.avatar_url creatorAvatarUrl,
+       COALESCE(v.duration_seconds, 0) durationSeconds
      FROM submissions s JOIN users u ON u.id = s.creator_id
      JOIN video_submissions v ON v.submission_id = s.id
      WHERE s.event_id = ? AND s.deleted_at IS NULL AND s.is_hidden = 0

@@ -24,6 +24,7 @@ const playlist: PlaylistResponse = {
     submissionId: id,
     title: `Demo ${id}`,
     creatorName: 'Team',
+    creatorAvatarUrl: null,
     description: null,
     durationSeconds: 60,
   })),
@@ -103,6 +104,12 @@ describe('playlist page', () => {
       {timeout: 3000},
     );
     expect(play).toHaveBeenCalledOnce();
+    // The presenter card stays on screen for the whole clip, including while paused.
+    const presenter = screen.getByText('Presenting').closest('.clipOverlay');
+    expect(presenter).toHaveTextContent('Team');
+    expect(presenter).toHaveTextContent('Demo a');
+    fireEvent.click(screen.getByRole('button', {name: 'Pause'}));
+    expect(screen.getByText('Presenting')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', {name: 'Next'}));
     await waitFor(
       () => expect(screen.getByRole('button', {name: 'Finish'})).toBeEnabled(),
