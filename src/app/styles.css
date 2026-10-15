@@ -2360,7 +2360,8 @@ kbd {
   .pageState--loading {
     animation: none;
   }
-  .clipOverlay {
+  .clipOverlay,
+  .screeningShell:fullscreen .clipOverlay {
     animation: none;
     transition: none;
   }
