@@ -425,7 +425,7 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
         <h2 id="reel-index-heading">Lineup</h2>
         <ol className="reelPlaylist" aria-label="Playback queue">
           {data.items.map((item, index) => (
-            <li key={item.videoId}>
+            <li key={item.videoId} className="reelItem">
               <button
                 className="reelRow"
                 aria-current={index === state.index ? 'true' : undefined}
@@ -440,6 +440,15 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
                   {formatDuration(item.durationSeconds)}
                 </span>
               </button>
+              <a
+                className="reelDownload"
+                href={`/api/videos/${encodeURIComponent(item.videoId)}/download`}
+                download
+                aria-label={`Download ${item.title}`}
+                title="Download video"
+              >
+                <ArrowIcon direction="down" />
+              </a>
             </li>
           ))}
         </ol>

@@ -2221,6 +2221,9 @@ kbd {
   margin: 0;
   list-style: none;
 }
+.reelItem {
+  position: relative;
+}
 .reelRow {
   display: grid;
   grid-template-columns: 2.2rem minmax(0, 1fr) auto;
@@ -2279,6 +2282,35 @@ kbd {
   color: var(--muted);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
+}
+/* Sibling of the row button: links cannot nest inside buttons. */
+.reelItem .reelRow {
+  padding-right: 3.25rem;
+}
+.reelDownload {
+  position: absolute;
+  top: 50%;
+  right: 0.6rem;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  color: var(--muted);
+  border-radius: 0.5rem;
+  transform: translateY(-50%);
+}
+.reelDownload:hover,
+.reelDownload:focus-visible {
+  color: var(--blurple);
+  background: var(--surface-tint-hover);
+}
+.reelItem:has(.reelRow[aria-current='true']) .reelDownload {
+  color: rgba(255, 255, 255, 0.75);
+}
+.reelItem:has(.reelRow[aria-current='true']) .reelDownload:hover,
+.reelItem:has(.reelRow[aria-current='true']) .reelDownload:focus-visible {
+  color: var(--on-accent);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 @keyframes rise {
