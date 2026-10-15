@@ -29,6 +29,7 @@ import {PlaylistEditor} from './PlaylistEditor';
 import {ReminderList} from './ReminderList';
 import {PlaylistPage, SharePlaylist} from './PlaylistPage';
 import {VideoPanel} from './VideoPanel';
+import {validateVideo, VIDEO_ACCEPT} from './video-upload';
 
 export function App() {
   const [user, setUser] = useState<SessionUser | null | undefined>();
@@ -108,6 +109,11 @@ function ShowAndTell({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deletionPending = useRef(false);
   const [createdSubmission, setCreatedSubmission] = useState<Submission | null>(null);
+  // The video picked in the create form, handed to the new card's VideoPanel to upload.
+  const [queuedVideo, setQueuedVideo] = useState<{
+    submissionId: string;
+    file: File;
+  } | null>(null);
   const admin = user.role === 'admin';
   const mounted = useRef(true);
   useEffect(() => {
@@ -239,24 +245,26 @@ function ShowAndTell({
     }
   }
 
-  async function createSubmission(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedId || submissionPending.current) return;
-    const form = event.currentTarget;
-    const data = new FormData(form);
+  /** Resolves true once the submission exists, so the form can clear itself. */
+  async function createSubmission(input: NewSubmission): Promise<boolean> {
+    if (!selectedId || submissionPending.current) return false;
+    if (input.video) validateVideo(input.video);
     submissionPending.current = true;
     setCreatingSubmission(true);
     try {
       const {submission} = await api<{submission: Submission}>(
         `/events/${selectedId}/submissions`,
-        json('POST', {
-          title: data.get('title'),
-          description: data.get('description'),
-        }),
+        json('POST', {title: input.title, description: input.description}),
       );
-      form.reset();
+      if (input.video) setQueuedVideo({submissionId: submission.id, file: input.video});
       setCreatedSubmission(submission);
-      await Promise.all([loadEvents(), requestSelected(selectedId)]);
+      try {
+        await Promise.all([loadEvents(), requestSelected(selectedId)]);
+      } catch (cause) {
+        // The entry exists, so still let the form clear.
+        setMutationError(cause instanceof Error ? cause.message : 'Request failed');
+      }
+      return true;
     } finally {
       submissionPending.current = false;
       setCreatingSubmission(false);
@@ -657,44 +665,26 @@ function ShowAndTell({
                 <p className="kicker">Add your video</p>
                 <h2 id="compose-heading">What are you showing?</h2>
                 <p className="formHint">
-                  Save a title first, then upload the video on your card below. Your entry
-                  stays put if the upload needs another try.
+                  Record it yourself: your screen, your face, your voice. Skip the
+                  AI-generated video and voiceover. Seeing the people who built it is most
+                  of the fun.
+                </p>
+                <p className="formHint">
+                  Add a title and your video, then submit. If the upload gets interrupted,
+                  your entry stays saved and you can resume from its card below.
                 </p>
               </div>
-              <form
-                className="submissionForm"
+              <SubmissionForm
                 key={visibleSelection.event.id}
-                aria-label="Create submission"
-                onSubmit={(event) => reportFailure(createSubmission(event))}
-              >
-                <label>
-                  Title
-                  <input
-                    name="title"
-                    maxLength={120}
-                    placeholder="A short, punchy name for your demo"
-                    disabled={creatingSubmission}
-                    required
-                  />
-                </label>
-                <label>
-                  Description (optional)
-                  <textarea
-                    name="description"
-                    rows={3}
-                    maxLength={1000}
-                    placeholder="One or two lines on what people will see"
-                    disabled={creatingSubmission}
-                  />
-                </label>
-                <button
-                  className="primaryAction"
-                  type="submit"
-                  disabled={creatingSubmission}
-                >
-                  {creatingSubmission ? 'Saving…' : 'Create submission'}
-                </button>
-              </form>
+                busy={creatingSubmission}
+                onCreate={(input) => {
+                  setMutationError(null);
+                  return createSubmission(input).catch((cause: Error) => {
+                    setMutationError(cause.message);
+                    return false;
+                  });
+                }}
+              />
             </section>
             <section className="lineup" aria-labelledby="lineup-heading">
               <header className="lineupHeader">
@@ -763,7 +753,16 @@ function ShowAndTell({
                               {submission.description}
                             </p>
                           ) : null}
-                          <VideoPanel submission={submission} canManage={canManage} />
+                          <VideoPanel
+                            submission={submission}
+                            canManage={canManage}
+                            initialFile={
+                              queuedVideo?.submissionId === submission.id
+                                ? queuedVideo.file
+                                : undefined
+                            }
+                            onInitialFileTaken={() => setQueuedVideo(null)}
+                          />
                         </div>
                         {admin || canManage ? (
                           <div className="cardActions">
@@ -814,7 +813,7 @@ function ShowAndTell({
                 <section className="emptyState">
                   <span>00</span>
                   <h2>{admin ? 'No videos yet' : 'No submissions yet'}</h2>
-                  <p>Create a submission above, then upload your video.</p>
+                  <p>Add your title and video above to submit.</p>
                 </section>
               ) : null}
             </section>
@@ -837,6 +836,107 @@ function ShowAndTell({
         )}
       </main>
     </AppFrame>
+  );
+}
+
+type NewSubmission = {
+  title: FormDataEntryValue | null;
+  description: FormDataEntryValue | null;
+  video: File | null;
+};
+
+/** Keyed by playlist: a remount drops the draft file along with the input. */
+function SubmissionForm({
+  busy,
+  onCreate,
+}: {
+  busy: boolean;
+  onCreate: (input: NewSubmission) => Promise<boolean>;
+}) {
+  const [video, setVideo] = useState<File | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const created = await onCreate({
+      title: data.get('title'),
+      description: data.get('description'),
+      video,
+    });
+    if (!created) return;
+    form.reset();
+    setVideo(null);
+    setVideoError(null);
+  }
+
+  return (
+    <form
+      className="submissionForm"
+      aria-label="Create submission"
+      onSubmit={(event) => void submit(event)}
+    >
+      <label>
+        Title
+        <input
+          name="title"
+          maxLength={120}
+          placeholder="A short, punchy name for your demo"
+          disabled={busy}
+          required
+        />
+      </label>
+      <label>
+        Description (optional)
+        <textarea
+          name="description"
+          rows={3}
+          maxLength={1000}
+          placeholder="One or two lines on what people will see"
+          disabled={busy}
+        />
+      </label>
+      <label className="filePicker" htmlFor="submission-video">
+        <span className="filePickerIcon">
+          <ArrowIcon direction="up" />
+        </span>
+        Video
+        <input
+          id="submission-video"
+          name="video"
+          type="file"
+          accept={VIDEO_ACCEPT}
+          disabled={busy}
+          aria-describedby="submission-video-hint"
+          onChange={(event) => {
+            const next = event.currentTarget.files?.[0] ?? null;
+            setVideoError(null);
+            setVideo(null);
+            if (!next) return;
+            try {
+              validateVideo(next);
+              setVideo(next);
+            } catch (cause) {
+              event.currentTarget.value = '';
+              setVideoError(cause instanceof Error ? cause.message : String(cause));
+            }
+          }}
+        />
+      </label>
+      <p id="submission-video-hint" className="formHint">
+        Up to 5 GiB · 10 minutes maximum · MP4, MOV, WebM and other video formats. You can
+        also add it later from your card.
+      </p>
+      {videoError ? (
+        <div className="inlineError" role="alert">
+          {videoError}
+        </div>
+      ) : null}
+      <button className="primaryAction" type="submit" disabled={busy}>
+        {busy ? 'Saving…' : video ? 'Submit and upload' : 'Create submission'}
+      </button>
+    </form>
   );
 }
 

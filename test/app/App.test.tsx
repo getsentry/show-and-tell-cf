@@ -12,6 +12,11 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {App, defaultPlaylistTitle} from '../../src/app/App';
 import type {Submission} from '../../src/shared/events';
+import type {
+  SubmissionVideo,
+  VideoUploadPart,
+  VideoUploadSession,
+} from '../../src/shared/videos';
 
 afterEach(() => {
   cleanup();
@@ -937,6 +942,135 @@ describe('App', () => {
     expect(await screen.findByLabelText('Choose video')).toBeInTheDocument();
   });
 
+  it('creates the submission and uploads the chosen video in one step', async () => {
+    let detailLoads = 0;
+    let uploadCreated = false;
+    const fetcher = vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+      if (url === '/api/events')
+        return Promise.resolve(jsonResponse({events: [october]}));
+      if (url.endsWith('/submissions') && init?.method === 'POST')
+        return Promise.resolve(jsonResponse({submission}));
+      if (url === '/api/events/october') {
+        detailLoads++;
+        return Promise.resolve(
+          jsonResponse(detailFor(october, detailLoads > 1 ? [submission] : [])),
+        );
+      }
+      if (url.endsWith('/video/upload') && init?.method === 'POST') {
+        uploadCreated = true;
+        return Promise.resolve(
+          jsonResponse({
+            upload: {
+              uploadId: 'upload-1',
+              videoId: 'video-1',
+              submissionId: submission.id,
+              fileName: 'demo.mp4',
+              contentType: 'video/mp4',
+              fileSize: 6,
+              partSize: 6,
+              expiresAt: '2099-01-01T00:00:00Z',
+              status: 'uploading' as const,
+              completedParts: [],
+            },
+            video: null,
+          }),
+        );
+      }
+      if (url.endsWith('/parts/1'))
+        return Promise.resolve(
+          jsonResponse({part: {partNumber: 1, etag: 'etag-1', sizeBytes: 6}}),
+        );
+      if (url.endsWith('/complete')) return Promise.resolve(jsonResponse({video: null}));
+      if (url.endsWith('/video/upload'))
+        return Promise.resolve(jsonResponse({upload: null}));
+      if (url.endsWith('/video')) return Promise.resolve(jsonResponse({video: null}));
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    window.history.replaceState(null, '', '/events/october');
+    render(<App />);
+    const form = await screen.findByRole('form', {name: 'Create submission'});
+    fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Project demo'}});
+    fireEvent.change(screen.getByLabelText('Video'), {
+      target: {files: [new File(['abcdef'], 'demo.mp4', {type: 'video/mp4'})]},
+    });
+    expect(screen.getByRole('button', {name: 'Submit and upload'})).toBeEnabled();
+    fireEvent.submit(form);
+    await waitFor(() =>
+      expect(fetcher.mock.calls.some(([url]) => url.endsWith('/complete'))).toBe(true),
+    );
+    expect(uploadCreated).toBe(true);
+    expect(screen.getByRole('button', {name: 'Create submission'})).toBeEnabled();
+  });
+
+  it('drops a picked video when switching playlists', async () => {
+    const fetcher = vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+      if (url === '/api/events')
+        return Promise.resolve(jsonResponse({events: [october, november]}));
+      if (url === '/api/events/october')
+        return Promise.resolve(jsonResponse(detailFor(october)));
+      if (url === '/api/events/november')
+        return Promise.resolve(jsonResponse(detailFor(november)));
+      if (url.endsWith('/submissions') && init?.method === 'POST')
+        return Promise.resolve(jsonResponse({submission}));
+      if (url.endsWith('/video/upload'))
+        return Promise.resolve(jsonResponse({upload: null}));
+      if (url.endsWith('/video')) return Promise.resolve(jsonResponse({video: null}));
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    window.history.replaceState(null, '', '/events/october');
+    render(<App />);
+    await screen.findByRole('form', {name: 'Create submission'});
+    fireEvent.change(screen.getByLabelText('Video'), {
+      target: {files: [new File(['abcdef'], 'demo.mp4', {type: 'video/mp4'})]},
+    });
+    expect(screen.getByRole('button', {name: 'Submit and upload'})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: /November 2026/}));
+    await screen.findByRole('heading', {name: 'November 2026'});
+    const form = await screen.findByRole('form', {name: 'Create submission'});
+    expect(screen.getByRole('button', {name: 'Create submission'})).toBeEnabled();
+    fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Demo'}});
+    fireEvent.submit(form);
+    await waitFor(() =>
+      expect(
+        fetcher.mock.calls.some(
+          ([url, init]) => url.endsWith('/submissions') && init?.method === 'POST',
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'Create submission'})).toBeEnabled(),
+    );
+    expect(
+      fetcher.mock.calls.some(
+        ([url, init]) => url.endsWith('/video/upload') && init?.method === 'POST',
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects a non-video file before creating the submission', async () => {
+    const fetcher = vi.fn((url: string) => {
+      if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+      if (url === '/api/events')
+        return Promise.resolve(jsonResponse({events: [october]}));
+      if (url === '/api/events/october')
+        return Promise.resolve(jsonResponse(detailFor(october)));
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    window.history.replaceState(null, '', '/events/october');
+    render(<App />);
+    await screen.findByRole('form', {name: 'Create submission'});
+    fireEvent.change(screen.getByLabelText('Video'), {
+      target: {files: [new File(['x'], 'notes.txt')]},
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('video file');
+    expect(screen.getByRole('button', {name: 'Create submission'})).toBeEnabled();
+  });
+
   it('creates a title-only submission once while the request is pending', async () => {
     const pending = deferred<Response>();
     const fetcher = vi.fn((url: string, init?: RequestInit) => {
@@ -1298,6 +1432,9 @@ type TestResponseBody =
   | {events: (typeof october)[]}
   | {event: typeof october}
   | {submission: typeof submission}
+  | {upload: VideoUploadSession | null; video?: SubmissionVideo | null}
+  | {video: SubmissionVideo | null}
+  | {part: VideoUploadPart}
   | ReturnType<typeof detailFor>;
 
 function jsonResponse(body: TestResponseBody) {

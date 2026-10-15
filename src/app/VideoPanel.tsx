@@ -40,9 +40,14 @@ const stages = {
 export function VideoPanel({
   submission,
   canManage,
+  initialFile,
+  onInitialFileTaken,
 }: {
   submission: Submission;
   canManage: boolean;
+  /** A video chosen in the create form; uploads once the empty card has loaded. */
+  initialFile?: File;
+  onInitialFileTaken?: () => void;
 }) {
   const [video, setVideo] = useState<SubmissionVideo | null>(null);
   const [upload, setUpload] = useState<VideoUploadSession | null>(null);
@@ -59,6 +64,7 @@ export function VideoPanel({
   const active = useRef<AbortController | null>(null);
   const reading = useRef<AbortController | null>(null);
   const mounted = useRef(false);
+  const initialFileTaken = useRef(false);
   const base = `/submissions/${encodeURIComponent(submission.id)}/video`;
 
   const refresh = useCallback(async () => {
@@ -175,7 +181,7 @@ export function VideoPanel({
     }
   }
 
-  function startUpload() {
+  function startUpload(chosen: File | null = file) {
     void perform('uploading', async (signal) => {
       let session = upload;
       if (session) {
@@ -208,24 +214,24 @@ export function VideoPanel({
             'The upload is still being prepared. Wait a moment and refresh its status.',
           );
       } else {
-        if (!file) throw new Error('Choose a video first.');
-        validateVideo(file);
+        if (!chosen) throw new Error('Choose a video first.');
+        validateVideo(chosen);
         const result = await api<DirectUploadResponse>(uploadPath(submission.id), {
           ...json('POST', {
-            fileName: file.name,
-            fileSize: file.size,
-            contentType: file.type || null,
+            fileName: chosen.name,
+            fileSize: chosen.size,
+            contentType: chosen.type || null,
           }),
           signal,
         });
         session = result.upload;
-        rememberFile(session.uploadId, file);
+        rememberFile(session.uploadId, chosen);
       }
       if (!mounted.current || signal.aborted) return;
       setUpload(session);
       await uploadParts(
         session,
-        file,
+        chosen,
         signal,
         (sent) => {
           if (mounted.current) setBytes(sent);
@@ -242,6 +248,18 @@ export function VideoPanel({
       }
     });
   }
+
+  // Start the upload picked in the create form once, after the card confirms it has no
+  // video or upload yet. On failure the file stays selected so "Upload video" retries.
+  useEffect(() => {
+    if (!initialFile || initialFileTaken.current || !canManage) return;
+    if (!loaded || loadError || operation) return;
+    initialFileTaken.current = true;
+    onInitialFileTaken?.();
+    if (video || upload) return;
+    setFile(initialFile);
+    startUpload(initialFile);
+  });
 
   function discardUpload() {
     if (!upload) return;
@@ -486,7 +504,7 @@ export function VideoPanel({
             <button
               className="primaryAction"
               disabled={busy || !!loadError || expired || (!file && !allPartsUploaded)}
-              onClick={startUpload}
+              onClick={() => startUpload()}
             >
               {allPartsUploaded
                 ? 'Finish upload'

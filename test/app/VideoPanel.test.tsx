@@ -152,6 +152,45 @@ describe('video uploads', () => {
     ).toBeInTheDocument();
   });
 
+  it('starts the upload handed over from the create form exactly once', async () => {
+    const {fetcher} = setup();
+    const taken = vi.fn();
+    const {rerender} = render(
+      <VideoPanel
+        submission={submission}
+        canManage
+        initialFile={file()}
+        onInitialFileTaken={taken}
+      />,
+    );
+    expect(await screen.findByText('Queued for processing')).toBeInTheDocument();
+    rerender(<VideoPanel submission={submission} canManage />);
+    expect(taken).toHaveBeenCalledTimes(1);
+    const creates = fetcher.mock.calls.filter(
+      ([url, init]) => url === `${base}/upload` && init?.method === 'POST',
+    );
+    expect(creates).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/complete'))).toHaveLength(
+      1,
+    );
+  });
+
+  it('does not auto-start over an existing upload', async () => {
+    const {fetcher} = setup(null, session);
+    const taken = vi.fn();
+    render(
+      <VideoPanel
+        submission={submission}
+        canManage
+        initialFile={file()}
+        onInitialFileTaken={taken}
+      />,
+    );
+    expect(await screen.findByText(/Unfinished upload/)).toBeInTheDocument();
+    await waitFor(() => expect(taken).toHaveBeenCalledTimes(1));
+    expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+  });
+
   it('keeps upload controls locked until a failed create has reconciled', async () => {
     const {fetcher} = setup();
     const original = fetcher.getMockImplementation()!;

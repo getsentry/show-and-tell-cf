@@ -1341,6 +1341,9 @@ textarea::placeholder {
 .composeIntro .formHint {
   max-width: 24rem;
 }
+.composeIntro .formHint + .formHint {
+  margin-top: 0.6rem;
+}
 .submissionForm {
   display: grid;
   gap: 0.9rem;
