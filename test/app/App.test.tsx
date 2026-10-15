@@ -1004,6 +1004,53 @@ describe('App', () => {
     expect(screen.getByRole('button', {name: 'Create submission'})).toBeEnabled();
   });
 
+  it('drops a picked video when switching playlists', async () => {
+    const fetcher = vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+      if (url === '/api/events')
+        return Promise.resolve(jsonResponse({events: [october, november]}));
+      if (url === '/api/events/october')
+        return Promise.resolve(jsonResponse(detailFor(october)));
+      if (url === '/api/events/november')
+        return Promise.resolve(jsonResponse(detailFor(november)));
+      if (url.endsWith('/submissions') && init?.method === 'POST')
+        return Promise.resolve(jsonResponse({submission}));
+      if (url.endsWith('/video/upload'))
+        return Promise.resolve(jsonResponse({upload: null}));
+      if (url.endsWith('/video')) return Promise.resolve(jsonResponse({video: null}));
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    window.history.replaceState(null, '', '/events/october');
+    render(<App />);
+    await screen.findByRole('form', {name: 'Create submission'});
+    fireEvent.change(screen.getByLabelText('Video'), {
+      target: {files: [new File(['abcdef'], 'demo.mp4', {type: 'video/mp4'})]},
+    });
+    expect(screen.getByRole('button', {name: 'Submit and upload'})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: /November 2026/}));
+    await screen.findByRole('heading', {name: 'November 2026'});
+    const form = await screen.findByRole('form', {name: 'Create submission'});
+    expect(screen.getByRole('button', {name: 'Create submission'})).toBeEnabled();
+    fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Demo'}});
+    fireEvent.submit(form);
+    await waitFor(() =>
+      expect(
+        fetcher.mock.calls.some(
+          ([url, init]) => url.endsWith('/submissions') && init?.method === 'POST',
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'Create submission'})).toBeEnabled(),
+    );
+    expect(
+      fetcher.mock.calls.some(
+        ([url, init]) => url.endsWith('/video/upload') && init?.method === 'POST',
+      ),
+    ).toBe(false);
+  });
+
   it('rejects a non-video file before creating the submission', async () => {
     const fetcher = vi.fn((url: string) => {
       if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
