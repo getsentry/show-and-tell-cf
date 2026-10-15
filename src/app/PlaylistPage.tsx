@@ -206,10 +206,14 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [toggleFullscreen]);
 
-  // Lobby music fills the silence before the reel; anything the audience
-  // could be watching or hearing from the reel stops it.
+  // Lobby music fills the silence before the reel and stops once it starts. A
+  // paused clip still counts: resuming jumps straight to playing after the
+  // video is audible, so music left on while paused would overlap the demo.
   const reelRunning =
-    state.phase === 'loading' || state.phase === 'title' || state.phase === 'playing';
+    state.phase === 'loading' ||
+    state.phase === 'title' ||
+    state.phase === 'playing' ||
+    state.phase === 'paused';
   useEffect(() => {
     if (!reelRunning) return;
     music.current?.pause();

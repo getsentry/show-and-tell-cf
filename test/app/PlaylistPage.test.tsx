@@ -176,6 +176,14 @@ describe('playlist page', () => {
     expect(toggle).toBeDisabled();
     await waitFor(() => expect(context.suspend).toHaveBeenCalledOnce());
     expect(play).not.toHaveBeenCalled();
+    // A paused clip is still mid-reel; music would overlap it on resume.
+    fireEvent.click(screen.getByRole('button', {name: 'Start now'}));
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'Pause'})).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Pause'}));
+    expect(screen.getByRole('button', {name: 'Resume'})).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'Lobby music'})).toBeDisabled();
   });
   it('recovers from load failures and renders a stable empty playlist', async () => {
     const fetch = vi
