@@ -7,6 +7,7 @@ import type {PlaybackResponse} from '../shared/videos';
 import {api, errorMessage} from './api';
 import {AppFrame} from './components/AppFrame';
 import {ArrowIcon} from './components/ArrowIcon';
+import {Avatar} from './components/Avatar';
 import {PageState} from './components/Loader';
 import {SentrySymbol} from './components/SentrySymbol';
 import {
@@ -126,6 +127,7 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
   const first = useRef<HTMLVideoElement>(null);
   const second = useRef<HTMLVideoElement>(null);
   const shell = useRef<HTMLDivElement>(null);
+  const controls = useRef<HTMLDivElement>(null);
   const controller = useRef<PlaylistController | null>(null);
   const idleTimer = useRef<number | null>(null);
   const [state, setState] = useState<PlayerState>(() => initialState(data.items));
@@ -155,6 +157,18 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
     const sync = () => setFullscreen(document.fullscreenElement === shell.current);
     document.addEventListener('fullscreenchange', sync);
     return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+
+  // Fullscreen controls float over the video; the presenter card sits just above them.
+  useEffect(() => {
+    const host = shell.current;
+    const bar = controls.current;
+    if (!host || !bar || !('ResizeObserver' in window)) return;
+    const observer = new ResizeObserver(() =>
+      host.style.setProperty('--controls-height', `${bar.offsetHeight}px`),
+    );
+    observer.observe(bar);
+    return () => observer.disconnect();
   }, []);
 
   const wake = useCallback(() => {
@@ -239,13 +253,17 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
             />
           ))}
           {showingVideo ? (
-            <div
-              className={`clipOverlay${state.phase === 'paused' ? ' clipOverlay--paused' : ''}`}
-              aria-live="polite"
-              key={clip.videoId}
-            >
-              <strong>{clip.title}</strong>
-              <span>{clip.creatorName}</span>
+            <div className="clipOverlay" aria-live="polite" key={clip.videoId}>
+              <Avatar
+                name={clip.creatorName}
+                avatarUrl={clip.creatorAvatarUrl}
+                className="clipOverlayAvatar"
+              />
+              <div className="clipOverlayCopy">
+                <small>Presenting</small>
+                <strong>{clip.creatorName}</strong>
+                <span>{clip.title}</span>
+              </div>
             </div>
           ) : null}
           {state.phase === 'idle' ? (
@@ -340,7 +358,7 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
             </div>
           ) : null}
         </div>
-        <div className="screeningControls" aria-label="Playback controls">
+        <div ref={controls} className="screeningControls" aria-label="Playback controls">
           <div className="screeningTimeline">
             <span>{formatDuration(state.currentTime)}</span>
             <input

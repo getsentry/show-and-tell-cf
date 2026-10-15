@@ -1792,35 +1792,68 @@ progress::-moz-progress-bar {
   opacity: 0.06;
   transform: rotate(-8deg);
 }
+/* Permanent presenter card so the room always knows who is on screen. */
 .clipOverlay {
   position: absolute;
   z-index: 1;
   bottom: 1rem;
   left: 1rem;
-  max-width: min(32rem, calc(100% - 2rem));
-  padding: 0.75rem 0.95rem;
+  display: flex;
+  gap: 0.7em;
+  align-items: center;
+  max-width: min(26rem, calc(100% - 2rem));
+  padding: 0.55em 1em 0.55em 0.55em;
+  font-size: 1rem;
   pointer-events: none;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 0.6rem;
+  border-radius: 999px;
   background: rgba(17, 11, 23, 0.78);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(10px);
-  animation: clipOverlay 7s ease both;
+  animation: clipOverlayIn 400ms ease backwards;
 }
-.clipOverlay--paused {
-  opacity: 1;
-  animation: none;
+.clipOverlay .clipOverlayAvatar {
+  width: 2.6em;
+  height: 2.6em;
+  font-size: 0.85em;
+  box-shadow: 0 0 0 2px #92dd00;
 }
-.clipOverlay strong,
-.clipOverlay span {
-  display: block;
+.clipOverlayCopy {
+  display: grid;
+  min-width: 0;
+  line-height: 1.2;
+}
+.clipOverlayCopy small,
+.clipOverlayCopy strong,
+.clipOverlayCopy span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.clipOverlay span {
-  margin-top: 0.2rem;
+.clipOverlayCopy small {
+  color: #92dd00;
+  font-size: 0.62em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.clipOverlayCopy strong {
+  font-size: 0.95em;
+}
+.clipOverlayCopy span {
   color: #d9cae5;
-  font-size: 0.78rem;
+  font-size: 0.78em;
+}
+/* Bigger for the room, and lifted clear of the floating controls while they show. */
+.screeningShell:fullscreen .clipOverlay {
+  bottom: calc(var(--controls-height, 6rem) + 0.75rem);
+  left: 1.5rem;
+  max-width: min(36rem, calc(100% - 3rem));
+  font-size: clamp(1rem, 0.55rem + 0.75vw, 1.5rem);
+  transition: bottom 250ms ease;
+}
+.screeningShell:fullscreen.idle .clipOverlay {
+  bottom: 1.5rem;
 }
 .titleCard,
 .startCard,
@@ -2314,19 +2347,10 @@ kbd {
     transform: translate3d(9%, 7%, 0) scale(1.18);
   }
 }
-@keyframes clipOverlay {
-  0% {
+@keyframes clipOverlayIn {
+  from {
     opacity: 0;
     transform: translateY(0.5rem);
-  }
-  8%,
-  80% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(0);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2337,8 +2361,8 @@ kbd {
     animation: none;
   }
   .clipOverlay {
-    animation-duration: 0.01s;
-    animation-delay: 6s;
+    animation: none;
+    transition: none;
   }
 }
 
@@ -2538,11 +2562,10 @@ kbd {
     margin: 0.75rem 0 0;
   }
   .clipOverlay {
-    right: 0.6rem;
     bottom: 0.6rem;
     left: 0.6rem;
-    max-width: none;
-    padding: 0.5rem 0.7rem;
+    max-width: calc(100% - 1.2rem);
+    font-size: 0.85rem;
   }
   .reelPlaylist {
     grid-template-columns: 1fr;
