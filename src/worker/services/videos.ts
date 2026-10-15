@@ -891,12 +891,12 @@ export async function authorizeVideoRead(
 ) {
   const submission = await db
     .prepare(
-      `SELECT id, creator_id FROM submissions WHERE id = ? AND deleted_at IS NULL
+      `SELECT id, creator_id, title FROM submissions WHERE id = ? AND deleted_at IS NULL
      AND (is_hidden = 0 OR creator_id = ? OR ? = 'admin')
      AND EXISTS (SELECT 1 FROM show_and_tell_events e WHERE e.id = submissions.event_id AND e.trashed_at IS NULL)`,
     )
     .bind(submissionId, user.id, user.role)
-    .first<{id: string; creator_id: string}>();
+    .first<{id: string; creator_id: string; title: string}>();
   if (!submission) throw new ServiceError('NOT_FOUND', 'Submission not found', 404);
   return submission;
 }
@@ -922,7 +922,7 @@ export async function authorizeVideoPlayback(
   user: SessionUser,
 ) {
   const video = await requireVideoById(db, videoId);
-  await authorizeVideoRead(db, video.submission_id, user);
+  return authorizeVideoRead(db, video.submission_id, user);
 }
 
 async function requireUpload(db: D1Database, submissionId: string, uploadId: string) {

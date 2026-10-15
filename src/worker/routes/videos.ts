@@ -49,16 +49,30 @@ videosRoutes.get('/:videoId/playback', async (c) => {
   }
 });
 
-videosRoutes.get('/:videoId/content', async (c) => {
+videosRoutes.get('/:videoId/content', (c) =>
+  serveVideoContent(c, c.req.param('videoId'), 'inline'),
+);
+videosRoutes.get('/:videoId/download', (c) =>
+  serveVideoContent(c, c.req.param('videoId'), 'attachment'),
+);
+
+async function serveVideoContent(
+  c: Context<WorkerEnv>,
+  videoId: string,
+  disposition: 'inline' | 'attachment',
+) {
   try {
-    await authorizeVideoPlayback(c.env.DB, c.req.param('videoId'), c.get('user'));
+    const submission = await authorizeVideoPlayback(c.env.DB, videoId, c.get('user'));
     const content = await getVideoContent(
       c.env.DB,
       c.env.VIDEOS,
-      c.req.param('videoId'),
+      videoId,
       c.req.header('Range'),
     );
     const headers = videoContentHeaders(content);
+    if (disposition === 'attachment') {
+      headers.set('Content-Disposition', attachmentDisposition(submission.title));
+    }
     return new Response(content.object.body, {
       status: content.range ? 206 : 200,
       headers,
@@ -76,7 +90,29 @@ videosRoutes.get('/:videoId/content', async (c) => {
     }
     return respondError(c, error);
   }
-});
+}
+
+/** Names the download after the submission title; the processed file is always MP4. */
+function attachmentDisposition(title: string) {
+  const name =
+    Array.from(title)
+      .filter((character) => {
+        const code = character.charCodeAt(0);
+        return code > 31 && code !== 127;
+      })
+      .join('')
+      .replace(/[\\/:*?"<>|]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^\.+/, '') || 'show-and-tell-video';
+  const fileName = `${name}.mp4`;
+  const asciiFallback = fileName.replace(/[^\x20-\x7e]/g, '_');
+  const encoded = encodeURIComponent(fileName).replace(
+    /['()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}
 
 submissionVideoRoutes.get('/:submissionId/video', async (c) => {
   try {
