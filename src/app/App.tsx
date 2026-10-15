@@ -812,7 +812,7 @@ function ShowAndTell({
               </ol>
               {!visibleSelection.submissions.length ? (
                 <section className="emptyState">
-                  <span>00</span>
+                  <span>0</span>
                   <h2>{admin ? 'No videos yet' : 'No submissions yet'}</h2>
                   <p>Create a submission above, then upload your video.</p>
                 </section>
@@ -826,7 +826,7 @@ function ShowAndTell({
           </div>
         ) : events.length ? null : (
           <section className="emptyState">
-            <span>00</span>
+            <span>0</span>
             <h2>No Show &amp; Tell playlists yet.</h2>
             <p>
               {admin
