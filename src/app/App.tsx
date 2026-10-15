@@ -29,6 +29,7 @@ import {PlaylistEditor} from './PlaylistEditor';
 import {ReminderList} from './ReminderList';
 import {PlaylistPage, SharePlaylist} from './PlaylistPage';
 import {VideoPanel} from './VideoPanel';
+import {validateVideo, VIDEO_ACCEPT} from './video-upload';
 
 export function App() {
   const [user, setUser] = useState<SessionUser | null | undefined>();
@@ -108,6 +109,13 @@ function ShowAndTell({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deletionPending = useRef(false);
   const [createdSubmission, setCreatedSubmission] = useState<Submission | null>(null);
+  const [draftVideo, setDraftVideo] = useState<File | null>(null);
+  const [draftVideoError, setDraftVideoError] = useState<string | null>(null);
+  // The video picked in the create form, handed to the new card's VideoPanel to upload.
+  const [queuedVideo, setQueuedVideo] = useState<{
+    submissionId: string;
+    file: File;
+  } | null>(null);
   const admin = user.role === 'admin';
   const mounted = useRef(true);
   useEffect(() => {
@@ -244,6 +252,15 @@ function ShowAndTell({
     if (!selectedId || submissionPending.current) return;
     const form = event.currentTarget;
     const data = new FormData(form);
+    const video = draftVideo;
+    if (video) {
+      try {
+        validateVideo(video);
+      } catch (cause) {
+        setDraftVideoError(cause instanceof Error ? cause.message : String(cause));
+        return;
+      }
+    }
     submissionPending.current = true;
     setCreatingSubmission(true);
     try {
@@ -255,6 +272,9 @@ function ShowAndTell({
         }),
       );
       form.reset();
+      setDraftVideo(null);
+      setDraftVideoError(null);
+      if (video) setQueuedVideo({submissionId: submission.id, file: video});
       setCreatedSubmission(submission);
       await Promise.all([loadEvents(), requestSelected(selectedId)]);
     } finally {
@@ -657,8 +677,13 @@ function ShowAndTell({
                 <p className="kicker">Add your video</p>
                 <h2 id="compose-heading">What are you showing?</h2>
                 <p className="formHint">
-                  Save a title first, then upload the video on your card below. Your entry
-                  stays put if the upload needs another try.
+                  Record it yourself: your screen, your face, your voice. Skip the
+                  AI-generated video and voiceover. Seeing the people who built it is most
+                  of the fun.
+                </p>
+                <p className="formHint">
+                  Add a title and your video, then submit. If the upload gets interrupted,
+                  your entry stays saved and you can resume from its card below.
                 </p>
               </div>
               <form
@@ -687,12 +712,54 @@ function ShowAndTell({
                     disabled={creatingSubmission}
                   />
                 </label>
+                <label className="filePicker" htmlFor="submission-video">
+                  <span className="filePickerIcon">
+                    <ArrowIcon direction="up" />
+                  </span>
+                  Video
+                  <input
+                    id="submission-video"
+                    name="video"
+                    type="file"
+                    accept={VIDEO_ACCEPT}
+                    disabled={creatingSubmission}
+                    aria-describedby="submission-video-hint"
+                    onChange={(event) => {
+                      const next = event.currentTarget.files?.[0] ?? null;
+                      setDraftVideoError(null);
+                      setDraftVideo(null);
+                      if (!next) return;
+                      try {
+                        validateVideo(next);
+                        setDraftVideo(next);
+                      } catch (cause) {
+                        event.currentTarget.value = '';
+                        setDraftVideoError(
+                          cause instanceof Error ? cause.message : String(cause),
+                        );
+                      }
+                    }}
+                  />
+                </label>
+                <p id="submission-video-hint" className="formHint">
+                  Up to 5 GiB · 10 minutes maximum · MP4, MOV, WebM and other video
+                  formats. You can also add it later from your card.
+                </p>
+                {draftVideoError ? (
+                  <div className="inlineError" role="alert">
+                    {draftVideoError}
+                  </div>
+                ) : null}
                 <button
                   className="primaryAction"
                   type="submit"
                   disabled={creatingSubmission}
                 >
-                  {creatingSubmission ? 'Saving…' : 'Create submission'}
+                  {creatingSubmission
+                    ? 'Saving…'
+                    : draftVideo
+                      ? 'Submit and upload'
+                      : 'Create submission'}
                 </button>
               </form>
             </section>
@@ -763,7 +830,16 @@ function ShowAndTell({
                               {submission.description}
                             </p>
                           ) : null}
-                          <VideoPanel submission={submission} canManage={canManage} />
+                          <VideoPanel
+                            submission={submission}
+                            canManage={canManage}
+                            initialFile={
+                              queuedVideo?.submissionId === submission.id
+                                ? queuedVideo.file
+                                : undefined
+                            }
+                            onInitialFileTaken={() => setQueuedVideo(null)}
+                          />
                         </div>
                         {admin || canManage ? (
                           <div className="cardActions">
@@ -814,7 +890,7 @@ function ShowAndTell({
                 <section className="emptyState">
                   <span>00</span>
                   <h2>{admin ? 'No videos yet' : 'No submissions yet'}</h2>
-                  <p>Create a submission above, then upload your video.</p>
+                  <p>Add your title and video above to submit.</p>
                 </section>
               ) : null}
             </section>
