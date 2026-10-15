@@ -422,6 +422,10 @@ describe('video uploads', () => {
         '/api/videos/video-1/content',
       ),
     );
+    expect(screen.getByRole('link', {name: 'Download video'})).toHaveAttribute(
+      'href',
+      '/api/videos/video-1/download',
+    );
     expect(screen.queryByRole('button', {name: 'Remove video'})).not.toBeInTheDocument();
     expect(fetcher.mock.calls.some(([url]) => url.endsWith('/upload'))).toBe(false);
   });

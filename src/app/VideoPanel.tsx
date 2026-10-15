@@ -374,6 +374,16 @@ export function VideoPanel({
               </button>
             )
           ) : null}
+          {video.status === 'ready' ? (
+            <a
+              className="textAction"
+              href={`/api/videos/${encodeURIComponent(video.id)}/download`}
+              download
+            >
+              <ArrowIcon direction="down" />
+              Download video
+            </a>
+          ) : null}
           {canManage ? (
             <div className="videoActions">
               {video.status === 'failed' || video.status === 'queued' ? (

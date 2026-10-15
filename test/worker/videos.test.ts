@@ -744,6 +744,22 @@ describe('R2 multipart video lifecycle', () => {
     expect(full.headers.get('cache-control')).toBe('private, no-store');
     expect(full.headers.get('etag')).toBeTruthy();
 
+    await env.DB.prepare('UPDATE submissions SET title = ? WHERE id = ?')
+      .bind('Démo: "fast" / safe', submissionId)
+      .run();
+    const download = await SELF.fetch(`${base}/videos/${ready.video.id}/download`, {
+      headers: {Cookie: ownerToken},
+    });
+    expect(download.status).toBe(200);
+    expect(await responseText(download)).toBe(bytes);
+    expect(download.headers.get('content-type')).toBe('video/mp4');
+    expect(download.headers.get('content-disposition')).toBe(
+      `attachment; filename="D_mo fast safe.mp4"; filename*=UTF-8''D%C3%A9mo%20fast%20safe.mp4`,
+    );
+    expect((await SELF.fetch(`${base}/videos/${ready.video.id}/download`)).status).toBe(
+      401,
+    );
+
     for (const [range, body, contentRange] of [
       ['bytes=2-5', '2345', 'bytes 2-5/10'],
       ['bytes=7-', '789', 'bytes 7-9/10'],
@@ -780,6 +796,7 @@ describe('R2 multipart video lifecycle', () => {
       `/submissions/${submissionId}/video`,
       `/videos/${video.id}/playback`,
       `/videos/${video.id}/content`,
+      `/videos/${video.id}/download`,
     ];
     await env.DB.prepare('UPDATE submissions SET is_hidden = 1 WHERE id = ?')
       .bind(submissionId)
