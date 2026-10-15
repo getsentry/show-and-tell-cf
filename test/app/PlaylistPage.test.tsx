@@ -8,6 +8,7 @@ import type {PlaylistResponse} from '../../src/shared/playlist';
 import type {Submission} from '../../src/shared/events';
 import type {SessionUser} from '../../src/shared/api';
 import type {PlaybackResponse} from '../../src/shared/videos';
+import {FakeAudioContext, stubAudioContext} from './fake-audio';
 
 const viewer: SessionUser = {
   id: 'u',
@@ -161,6 +162,39 @@ describe('playlist page', () => {
       expect(screen.getByRole('heading', {name: 'Demo a'})).toBeInTheDocument(),
     );
     expect(screen.getByRole('button', {name: 'Unmute'})).toBeInTheDocument();
+  });
+  it('plays lobby music until the reel starts', async () => {
+    const context = new FakeAudioContext();
+    stubAudioContext(context);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url === '/api/events/event/playlist'
+          ? response(playlist)
+          : response({source: {kind: 'mp4', url: '/content'}, expiresAt: null}),
+      ),
+    );
+    render(<PlaylistPage eventId="event" user={viewer} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Lobby music'}));
+    expect(screen.getByRole('button', {name: 'Pause music'})).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await waitFor(() => expect(context.resume).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', {name: 'Play all'}));
+    const toggle = screen.getByRole('button', {name: 'Lobby music'});
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(toggle).toBeDisabled();
+    await waitFor(() => expect(context.suspend).toHaveBeenCalledOnce());
+    expect(play).not.toHaveBeenCalled();
+    // A paused clip is still mid-reel; music would overlap it on resume.
+    fireEvent.click(screen.getByRole('button', {name: 'Start now'}));
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'Pause'})).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Pause'}));
+    expect(screen.getByRole('button', {name: 'Resume'})).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'Lobby music'})).toBeDisabled();
   });
   it('recovers from load failures and renders a stable empty playlist', async () => {
     const fetch = vi

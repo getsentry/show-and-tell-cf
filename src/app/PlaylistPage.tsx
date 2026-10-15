@@ -18,6 +18,7 @@ import {
   type PlayerState,
   type PlaylistController,
 } from './player/controller';
+import {createLobbyMusic, type LobbyMusic} from './player/lobby-music';
 
 /** Controls fade out this long after the pointer rests, in fullscreen only. */
 const IDLE_CONTROLS_MS = 2_500;
@@ -134,6 +135,8 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
   const [idle, setIdle] = useState(false);
+  const music = useRef<LobbyMusic | null>(null);
+  const [musicPlaying, setMusicPlaying] = useState(false);
 
   useEffect(() => {
     if (!first.current || !second.current) return;
@@ -216,6 +219,37 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [toggleFullscreen]);
+
+  // Lobby music fills the silence before the reel and stops once it starts. A
+  // paused clip still counts: resuming jumps straight to playing after the
+  // video is audible, so music left on while paused would overlap the demo.
+  const reelRunning =
+    state.phase === 'loading' ||
+    state.phase === 'title' ||
+    state.phase === 'playing' ||
+    state.phase === 'paused';
+  useEffect(() => {
+    if (!reelRunning) return;
+    music.current?.pause();
+    setMusicPlaying(false);
+  }, [reelRunning]);
+  useEffect(
+    () => () => {
+      music.current?.destroy();
+      music.current = null;
+    },
+    [],
+  );
+  const toggleMusic = () => {
+    if (musicPlaying) {
+      music.current?.pause();
+      setMusicPlaying(false);
+      return;
+    }
+    music.current ??= createLobbyMusic();
+    setMusicPlaying(true);
+    music.current.play().catch(() => setMusicPlaying(false));
+  };
 
   const clip = data.items[state.index];
   const count = data.items.length;
@@ -405,6 +439,14 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
             </span>
           </div>
           <div className="screeningSettings">
+            <button
+              aria-pressed={musicPlaying}
+              disabled={reelRunning}
+              title="Background music while people join"
+              onClick={toggleMusic}
+            >
+              {musicPlaying ? 'Pause music' : 'Lobby music'}
+            </button>
             <button
               aria-pressed={state.muted}
               onClick={() => controller.current?.setMuted(!state.muted)}
