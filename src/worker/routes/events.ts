@@ -38,7 +38,7 @@ eventRoutes.get('/', async (c) => {
      WHERE (e.is_hidden = 0 OR ? = 'admin')
        AND ((? = 1 AND e.trashed_at IS NOT NULL)
          OR (? = 0 AND e.trashed_at IS NULL AND e.cancelled_at IS NULL))
-     GROUP BY e.id ORDER BY e.created_at DESC`,
+     GROUP BY e.id ORDER BY julianday(COALESCE(e.starts_at, e.created_at)) DESC, e.created_at DESC`,
   )
     .bind(
       c.get('user').role,

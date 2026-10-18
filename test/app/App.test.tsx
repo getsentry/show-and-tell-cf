@@ -10,7 +10,7 @@ import {
 } from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
-import {App, defaultPlaylistTitle} from '../../src/app/App';
+import {App, defaultPlaylistTitle, formatShowDate} from '../../src/app/App';
 import type {Submission} from '../../src/shared/events';
 import type {
   SubmissionVideo,
@@ -370,6 +370,61 @@ describe('App', () => {
       'Show & Tell September - 2026',
     );
     expect(defaultPlaylistTitle(new Date(2027, 0, 1))).toBe('Show & Tell January - 2027');
+  });
+
+  it('formats show dates in the show timezone and tolerates bad stored data', () => {
+    expect(formatShowDate('2026-11-12T17:00:00.000Z', 'America/Los_Angeles')).toBe(
+      'Thursday, November 12, 2026 · 9:00 AM PST',
+    );
+    expect(formatShowDate('2026-10-15T16:00:00.000Z', 'Europe/Vienna')).toBe(
+      'Thursday, October 15, 2026 · 6:00 PM GMT+2',
+    );
+    expect(formatShowDate('2026-11-12T17:00:00.000Z', 'Not/A_Timezone')).toMatch(
+      /2026 · /,
+    );
+    expect(formatShowDate('not a date', 'America/Los_Angeles')).toBeNull();
+  });
+
+  it('shows each date on the overview card and links the card to the screening', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/session') return jsonResponse({user: admin});
+        if (url === '/api/events')
+          return Response.json({
+            events: [
+              {
+                ...november,
+                slug: 'show-and-tell-november-2026',
+                startsAt: '2026-11-12T17:00:00.000Z',
+                timezone: 'America/Los_Angeles',
+              },
+              october,
+            ],
+          });
+        throw new Error(url);
+      }),
+    );
+    render(<App />);
+    const card = await screen.findByRole('article', {name: 'November 2026'});
+    const hero = within(card).getByRole('link', {name: /November 2026/});
+    expect(hero).toHaveAttribute(
+      'href',
+      '/playlists/november/show-and-tell-november-2026',
+    );
+    expect(
+      within(hero).getByRole('heading', {name: 'November 2026'}),
+    ).toBeInTheDocument();
+    expect(
+      within(hero).getByText('Thursday, November 12, 2026 · 9:00 AM PST'),
+    ).toHaveAttribute('datetime', '2026-11-12T17:00:00.000Z');
+    // Playlists without a scheduled date keep a title-only card.
+    const undated = screen.getByRole('article', {name: 'October 2026'});
+    expect(undated.querySelector('time')).toBeNull();
+    expect(within(undated).getByRole('link', {name: 'October 2026'})).toHaveAttribute(
+      'href',
+      '/playlists/october',
+    );
   });
 
   it('opens on the HTML overview, with watch and upload links and collapsed creation', async () => {

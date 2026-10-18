@@ -67,6 +67,28 @@ describe('events and submissions', () => {
     ).toMatchObject({event: {description: null}});
   });
 
+  it('orders the overview by show date, falling back to creation date', async () => {
+    const admin = await userCookie('admin', true);
+    const rows = [
+      ['october', '2026-10-15T16:00:00.000Z', '2026-09-01 10:00:00'],
+      ['november', '2026-11-12T17:00:00.000Z', '2026-10-18 10:00:00'],
+      ['undated', null, '2026-10-01 10:00:00'],
+      ['early-added-december', '2026-12-10T17:00:00.000Z', '2026-08-01 10:00:00'],
+    ];
+    for (const [id, startsAt, createdAt] of rows)
+      await env.DB.prepare(
+        'INSERT INTO show_and_tell_events (id, title, created_by, slug, starts_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+        .bind(id, id, admin.id, id, startsAt, createdAt)
+        .run();
+    const response = await request('/api/events', admin.cookie, 'GET');
+    expect(await response.json()).toEqual({
+      events: ['early-added-december', 'november', 'october', 'undated'].map((id) =>
+        expect.objectContaining({id}),
+      ),
+    });
+  });
+
   it('restricts edits to admins with same-origin requests, including member view', async () => {
     const admin = await userCookie('admin', true);
     const member = await userCookie('member', false);

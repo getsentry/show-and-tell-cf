@@ -71,6 +71,34 @@ function currentEventId() {
   return legacy && /^[a-zA-Z0-9_-]{1,128}$/.test(legacy) ? legacy : null;
 }
 
+/** The show's start in its own timezone, e.g. "Thursday, November 12, 2026 · 9:00 AM PST". */
+export function formatShowDate(startsAt: string, timezone?: string | null) {
+  const date = new Date(startsAt);
+  if (!Number.isFinite(date.getTime())) return null;
+  const format = (timeZone?: string) => {
+    const day = date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone,
+    });
+    const time = date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+      timeZone,
+    });
+    return `${day} · ${time}`;
+  };
+  try {
+    return format(timezone?.trim() || undefined);
+  } catch {
+    // A malformed stored timezone falls back to the viewer's own.
+    return format();
+  }
+}
+
 export function defaultPlaylistTitle(now = new Date()) {
   const month = now.toLocaleString('en-US', {month: 'long'});
   return `Show & Tell ${month} - ${now.getFullYear()}`;
@@ -494,58 +522,75 @@ function ShowAndTell({
                 </form>
               ) : null}
               <div className="eventGrid">
-                {events.map((event) => (
-                  <article className="eventCard" key={event.id} aria-label={event.title}>
-                    <div className="eventCardHero">
-                      <h3>{event.title}</h3>
-                    </div>
-                    <div className="eventCardBody">
-                      {event.hidden ? (
-                        <span className="tag tag--hidden">Hidden</span>
-                      ) : null}
-                      {event.description ? <p>{event.description}</p> : null}
-                      <p className="eventCount">
-                        {event.submissionCount}{' '}
-                        {event.submissionCount === 1 ? 'submission' : 'submissions'}
-                        {admin ? '' : ' from you'}
-                      </p>
+                {events.map((event) => {
+                  const showDate = event.startsAt
+                    ? formatShowDate(event.startsAt, event.timezone)
+                    : null;
+                  return (
+                    <article
+                      className="eventCard"
+                      key={event.id}
+                      aria-label={event.title}
+                    >
                       <a
-                        className="primaryAction primaryAction--play"
+                        className="eventCardHero"
                         href={playlistPath(event.id, event.slug)}
                       >
-                        Open the screening
-                      </a>
-                      <div className="eventCardActions">
-                        <a
-                          className="submissionLink"
-                          href={submissionPath(event.id, event.slug)}
-                          onClick={(click) => {
-                            if (
-                              click.button !== 0 ||
-                              click.metaKey ||
-                              click.ctrlKey ||
-                              click.shiftKey ||
-                              click.altKey
-                            )
-                              return;
-                            click.preventDefault();
-                            selectEvent(event.id, true, event.slug);
-                          }}
-                        >
-                          Upload &amp; submissions
-                        </a>
-                        {admin ? (
-                          <button
-                            className="secondaryAction"
-                            onClick={() => editPlaylist(event)}
-                          >
-                            Edit playlist
-                          </button>
+                        <h3>{event.title}</h3>
+                        {showDate ? (
+                          <time className="eventCardDate" dateTime={event.startsAt!}>
+                            {showDate}
+                          </time>
                         ) : null}
+                      </a>
+                      <div className="eventCardBody">
+                        {event.hidden ? (
+                          <span className="tag tag--hidden">Hidden</span>
+                        ) : null}
+                        {event.description ? <p>{event.description}</p> : null}
+                        <p className="eventCount">
+                          {event.submissionCount}{' '}
+                          {event.submissionCount === 1 ? 'submission' : 'submissions'}
+                          {admin ? '' : ' from you'}
+                        </p>
+                        <a
+                          className="primaryAction primaryAction--play"
+                          href={playlistPath(event.id, event.slug)}
+                        >
+                          Open the screening
+                        </a>
+                        <div className="eventCardActions">
+                          <a
+                            className="submissionLink"
+                            href={submissionPath(event.id, event.slug)}
+                            onClick={(click) => {
+                              if (
+                                click.button !== 0 ||
+                                click.metaKey ||
+                                click.ctrlKey ||
+                                click.shiftKey ||
+                                click.altKey
+                              )
+                                return;
+                              click.preventDefault();
+                              selectEvent(event.id, true, event.slug);
+                            }}
+                          >
+                            Upload &amp; submissions
+                          </a>
+                          {admin ? (
+                            <button
+                              className="secondaryAction"
+                              onClick={() => editPlaylist(event)}
+                            >
+                              Edit playlist
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
             </section>
           </>

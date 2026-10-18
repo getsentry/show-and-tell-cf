@@ -59,7 +59,7 @@ export function ReminderList() {
           <p className="reminderMode" role="status">
             {data.enabled
               ? 'Automatic reminders enabled'
-              : 'Automatic reminders disabled — nothing will be sent or revealed automatically.'}
+              : 'Automatic reminders disabled — nothing will be sent automatically.'}
           </p>
           <p className="formHint">
             Previews and destinations reflect current configuration, not a historical

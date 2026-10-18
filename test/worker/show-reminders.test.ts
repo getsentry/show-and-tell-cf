@@ -62,7 +62,7 @@ it.each([
   'http://example.test',
   'https://user:secret@example.test',
 ])(
-  'reports a safe configuration diagnostic for origin %s before revealing or sending',
+  'reports a safe configuration diagnostic for origin %s before sending',
   async (origin) => {
     await seed();
     const bindings = {...config(), APP_ORIGIN: origin};
@@ -88,7 +88,7 @@ it.each([
     expect(slack).not.toHaveBeenCalled();
   },
 );
-it('pauses reminders and automatic reveal in trash and resumes eligible reminders after restore', async () => {
+it('pauses reminders in trash and resumes eligible reminders after restore', async () => {
   await seed();
   await env.DB.prepare(
     "UPDATE show_and_tell_events SET trashed_at = CURRENT_TIMESTAMP WHERE id = 'show'",
@@ -96,11 +96,6 @@ it('pauses reminders and automatic reveal in trash and resumes eligible reminder
   await processShowReminders(config(), now);
   expect(send).not.toHaveBeenCalled();
   expect(await statuses()).toEqual([{channel: 'email', status: 'pending'}]);
-  expect(
-    await env.DB.prepare(
-      "SELECT is_hidden, revealed_at FROM show_and_tell_events WHERE id = 'show'",
-    ).first(),
-  ).toEqual({is_hidden: 1, revealed_at: null});
   await env.DB.prepare(
     "UPDATE show_and_tell_events SET trashed_at = NULL WHERE id = 'show'",
   ).run();
@@ -131,7 +126,7 @@ it('does not require an origin while reminders are disabled', async () => {
     ),
   ).resolves.toBeUndefined();
 });
-it('reveals a due show and sends email once across concurrent and repeated ticks', async () => {
+it('sends email once across concurrent and repeated ticks without changing visibility', async () => {
   await seed();
   await Promise.all([
     processShowReminders(config(), now),
@@ -147,16 +142,6 @@ it('reveals a due show and sends email once across concurrent and repeated ticks
     }),
   ]);
   expect(await statuses()).toEqual([{channel: 'email', status: 'sent'}]);
-  expect(
-    await env.DB.prepare(
-      "SELECT is_hidden FROM show_and_tell_events WHERE id='show'",
-    ).first(),
-  ).toEqual({is_hidden: 0});
-  // A manual hide after reveal is not overridden on every tick.
-  await env.DB.prepare(
-    "UPDATE show_and_tell_events SET is_hidden = 1 WHERE id='show'",
-  ).run();
-  await processShowReminders(config(), now);
   expect(
     await env.DB.prepare(
       "SELECT is_hidden FROM show_and_tell_events WHERE id='show'",
@@ -206,7 +191,7 @@ it('does nothing when disabled and never contacts missing or unsafe delivery tar
   expect(slack).not.toHaveBeenCalled();
   expect(await statuses()).toEqual([{channel: 'email', status: 'pending'}]);
 });
-it('skips cancelled, past and stale reminders while leaving future shows hidden', async () => {
+it('skips cancelled, past and stale reminders while leaving future shows untouched', async () => {
   await seed('cancelled');
   await env.DB.prepare(
     "UPDATE show_and_tell_events SET cancelled_at = '2030-09-30', plan_updated_by='scheduler' WHERE id = 'cancelled'",
