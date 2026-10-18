@@ -89,7 +89,7 @@ export function createSql(plan) {
   // NOT NULL created_by makes a missing/non-admin actor fail instead of silently inserting nothing.
   return `INSERT INTO show_and_tell_events
     (id, plan_key, title, description, slug, is_hidden, starts_at, reminder_at, timezone, meeting_url, created_by)
-    VALUES (${[plan.id, plan.key, plan.title, plan.description, plan.slug].map(quote).join(', ')}, 1,
+    VALUES (${[plan.id, plan.key, plan.title, plan.description, plan.slug].map(quote).join(', ')}, 0,
       ${[plan.startsAt, plan.reminderAt, plan.timezone, plan.meetingUrl].map(quote).join(', ')}, ${admin(plan.actor)})
     ON CONFLICT(plan_key) WHERE plan_key IS NOT NULL DO NOTHING;`;
 }
@@ -177,7 +177,7 @@ export function main(args) {
         reminderAt: normalized.reminderAt,
         timezone: normalized.timezone,
       };
-      sql = `UPDATE show_and_tell_events SET starts_at = ${quote(plan.startsAt)}, reminder_at = ${quote(plan.reminderAt)}, timezone = ${quote(plan.timezone)}, is_hidden = 1, revealed_at = NULL, plan_updated_by = ${admin(actor)}, updated_at = CURRENT_TIMESTAMP WHERE ${guard} RETURNING id;`;
+      sql = `UPDATE show_and_tell_events SET starts_at = ${quote(plan.startsAt)}, reminder_at = ${quote(plan.reminderAt)}, timezone = ${quote(plan.timezone)}, plan_updated_by = ${admin(actor)}, updated_at = CURRENT_TIMESTAMP WHERE ${guard} RETURNING id;`;
     } else if (command === 'cancel') {
       sql = `UPDATE show_and_tell_events SET cancelled_at = CURRENT_TIMESTAMP, is_hidden = 1, plan_updated_by = ${admin(actor)}, updated_at = CURRENT_TIMESTAMP WHERE ${guard} RETURNING id;`;
     } else {

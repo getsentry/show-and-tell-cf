@@ -37,7 +37,7 @@ test('rejects ambiguous dates, impossible dates, past reminders, bad timezone an
     assert.throws(() => normalizePlan({...input, ...changes}, now));
   }
 });
-test('migration and create SQL atomically create one hidden show, one email delivery and one audit', () => {
+test('migration and create SQL atomically create one visible show, one email delivery and one audit', () => {
   const db = new DatabaseSync(':memory:');
   try {
     for (const file of readdirSync(new URL('../migrations/', import.meta.url)).sort())
@@ -54,7 +54,7 @@ test('migration and create SQL atomically create one hidden show, one email deli
     );
     assert.equal(
       db.prepare('SELECT is_hidden FROM show_and_tell_events').get().is_hidden,
-      1,
+      0,
     );
     assert.equal(db.prepare('SELECT COUNT(*) count FROM show_reminders').get().count, 1);
     assert.equal(db.prepare('SELECT COUNT(*) count FROM show_plan_audit').get().count, 1);

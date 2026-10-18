@@ -37,11 +37,6 @@ export async function processShowReminders(env: ReminderEnv, now = new Date()) {
       WHERE channel = 'email' AND status = 'pending' AND event_id IN (
         SELECT id FROM show_and_tell_events WHERE trashed_at IS NULL AND (cancelled_at IS NOT NULL OR starts_at <= ? OR reminder_at < ?)
       )`).bind(timestamp, stale),
-    env.DB.prepare(`UPDATE show_and_tell_events SET is_hidden = 0, revealed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-      WHERE cancelled_at IS NULL AND trashed_at IS NULL AND reminder_at <= ? AND starts_at > ? AND revealed_at IS NULL`).bind(
-      timestamp,
-      timestamp,
-    ),
   ]);
   const {results} = await env.DB.prepare(`SELECT DISTINCT e.id FROM show_and_tell_events e
     JOIN show_reminders r ON r.event_id = e.id
