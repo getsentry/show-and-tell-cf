@@ -1717,7 +1717,7 @@ progress::-moz-progress-bar {
   background: #110b17;
   box-shadow: 0 22px 55px rgba(var(--shadow-ink), 0.22);
 }
-.screeningShell:fullscreen {
+.screeningShell.fullscreen {
   display: flex;
   width: 100vw;
   height: 100vh;
@@ -1725,12 +1725,23 @@ progress::-moz-progress-bar {
   border: 0;
   border-radius: 0;
 }
-.screeningShell:fullscreen .screeningStage {
+/* Without the Fullscreen API (iPhone Safari) the shell covers the viewport instead. */
+.screeningShell.pageFullscreen {
+  position: fixed;
+  z-index: 200;
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+body:has(.screeningShell.pageFullscreen) {
+  overflow: hidden;
+}
+.screeningShell.fullscreen .screeningStage {
   flex: 1;
   min-height: 0;
   aspect-ratio: auto;
 }
-.screeningShell:fullscreen .screeningControls {
+.screeningShell.fullscreen .screeningControls {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -1747,10 +1758,10 @@ progress::-moz-progress-bar {
     opacity 250ms ease,
     transform 250ms ease;
 }
-.screeningShell:fullscreen.idle {
+.screeningShell.fullscreen.idle {
   cursor: none;
 }
-.screeningShell:fullscreen.idle .screeningControls {
+.screeningShell.fullscreen.idle .screeningControls {
   opacity: 0;
   pointer-events: none;
   transform: translateY(0.75rem);
@@ -1874,14 +1885,14 @@ progress::-moz-progress-bar {
   font-size: 0.78em;
 }
 /* Bigger for the room, and lifted clear of the floating controls while they show. */
-.screeningShell:fullscreen .clipOverlay {
+.screeningShell.fullscreen .clipOverlay {
   bottom: calc(var(--controls-height, 6rem) + 0.75rem);
   left: 1.5rem;
   max-width: min(36rem, calc(100% - 3rem));
   font-size: clamp(1rem, 0.55rem + 0.75vw, 1.5rem);
   transition: bottom 250ms ease;
 }
-.screeningShell:fullscreen.idle .clipOverlay {
+.screeningShell.fullscreen.idle .clipOverlay {
   bottom: 1.5rem;
 }
 .titleCard,
@@ -2427,7 +2438,7 @@ kbd {
     animation: none;
   }
   .clipOverlay,
-  .screeningShell:fullscreen .clipOverlay {
+  .screeningShell.fullscreen .clipOverlay {
     animation: none;
     transition: none;
   }

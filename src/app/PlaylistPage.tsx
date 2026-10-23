@@ -132,7 +132,11 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
   const controller = useRef<PlaylistController | null>(null);
   const idleTimer = useRef<number | null>(null);
   const [state, setState] = useState<PlayerState>(() => initialState(data.items));
-  const [fullscreen, setFullscreen] = useState(false);
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
+  // iPhone Safari can only fullscreen a <video>, which would drop the overlays and
+  // break on the slot swap between clips, so the shell fills the viewport instead.
+  const [pageFullscreen, setPageFullscreen] = useState(false);
+  const fullscreen = nativeFullscreen || pageFullscreen;
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
   const [idle, setIdle] = useState(false);
   const music = useRef<LobbyMusic | null>(null);
@@ -157,7 +161,7 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
   }, [data.items, data.event.id]);
 
   useEffect(() => {
-    const sync = () => setFullscreen(document.fullscreenElement === shell.current);
+    const sync = () => setNativeFullscreen(document.fullscreenElement === shell.current);
     document.addEventListener('fullscreenchange', sync);
     return () => document.removeEventListener('fullscreenchange', sync);
   }, []);
@@ -193,8 +197,10 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
         await document.exitFullscreen();
         return;
       }
-      if (!shell.current?.requestFullscreen)
-        throw new Error('Fullscreen is unavailable in this browser.');
+      if (!shell.current?.requestFullscreen) {
+        setPageFullscreen((value) => !value);
+        return;
+      }
       await shell.current.requestFullscreen();
     } catch (cause) {
       setFullscreenError(errorMessage(cause));
@@ -265,7 +271,7 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
     <section className="screening" aria-label="Screening player">
       <div
         ref={shell}
-        className={`screeningShell${idle && state.phase === 'playing' ? ' idle' : ''}`}
+        className={`screeningShell${fullscreen ? ' fullscreen' : ''}${pageFullscreen ? ' pageFullscreen' : ''}${idle && state.phase === 'playing' ? ' idle' : ''}`}
         onPointerMove={wake}
         onPointerDown={wake}
         tabIndex={-1}
