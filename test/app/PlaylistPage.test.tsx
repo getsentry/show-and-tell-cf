@@ -212,16 +212,38 @@ describe('playlist page', () => {
     expect(screen.queryByRole('button', {name: /Refresh/i})).not.toBeInTheDocument();
     expect(screen.queryByRole('button', {name: 'Play all'})).not.toBeInTheDocument();
   });
-  it('reports unavailable fullscreen and provides a clipboard fallback', async () => {
+  it('fills the viewport when the browser cannot fullscreen the player', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => response(playlist)),
     );
     render(<PlaylistPage eventId="event" user={viewer} />);
-    fireEvent.click(await screen.findByRole('button', {name: 'Fullscreen'}));
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Fullscreen is unavailable',
+    const shell = (await screen.findByLabelText('Screening player')).firstElementChild;
+    fireEvent.click(screen.getByRole('button', {name: 'Fullscreen'}));
+    expect(shell).toHaveClass('fullscreen', 'pageFullscreen');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Exit fullscreen'}));
+    expect(shell).not.toHaveClass('fullscreen');
+    expect(shell).not.toHaveClass('pageFullscreen');
+  });
+  it('reports a rejected fullscreen request and provides a clipboard fallback', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response(playlist)),
     );
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: vi.fn().mockRejectedValue(new Error('Fullscreen was denied.')),
+    });
+    try {
+      render(<PlaylistPage eventId="event" user={viewer} />);
+      fireEvent.click(await screen.findByRole('button', {name: 'Fullscreen'}));
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Fullscreen was denied.',
+      );
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'requestFullscreen');
+    }
     cleanup();
     render(<SharePlaylist eventId="event" />);
     fireEvent.click(screen.getByRole('button', {name: 'Copy screening link'}));
