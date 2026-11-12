@@ -12,6 +12,7 @@ import type {
 import {api, errorMessage, json} from './api';
 import {ConfirmDialog} from './components/ConfirmDialog';
 import {ArrowIcon} from './components/ArrowIcon';
+import {SharePlaylist} from './PlaylistPage';
 import {
   checkRememberedFile,
   forgetFile,
@@ -40,11 +41,14 @@ const stages = {
 export function VideoPanel({
   submission,
   canManage,
+  eventSlug,
   initialFile,
   onInitialFileTaken,
 }: {
   submission: Submission;
   canManage: boolean;
+  /** Keeps the copied screening link on the show's readable URL. */
+  eventSlug?: string;
   /** A video chosen in the create form; uploads once the empty card has loaded. */
   initialFile?: File;
   onInitialFileTaken?: () => void;
@@ -401,6 +405,14 @@ export function VideoPanel({
               <ArrowIcon direction="down" />
               Download video
             </a>
+          ) : null}
+          {/* Hidden submissions stay out of the screening, so there is nothing to link to. */}
+          {video.status === 'ready' && !submission.hidden ? (
+            <SharePlaylist
+              eventId={submission.eventId}
+              slug={eventSlug}
+              videoId={video.id}
+            />
           ) : null}
           {canManage ? (
             <div className="videoActions">

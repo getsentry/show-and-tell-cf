@@ -469,6 +469,31 @@ describe('video uploads', () => {
     expect(fetcher.mock.calls.some(([url]) => url.endsWith('/upload'))).toBe(false);
   });
 
+  it('copies a screening link to a ready video, except for hidden submissions', async () => {
+    setup({...queued, status: 'ready', durationSeconds: 90});
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal('navigator', {clipboard: {writeText}});
+    const {rerender} = render(
+      <VideoPanel submission={submission} canManage={false} eventSlug="November" />,
+    );
+    fireEvent.click(await screen.findByRole('button', {name: 'Copy video link'}));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        `${window.location.origin}/playlists/event-1/november?video=video-1`,
+      ),
+    );
+    rerender(
+      <VideoPanel
+        submission={{...submission, hidden: true}}
+        canManage={false}
+        eventSlug="November"
+      />,
+    );
+    expect(
+      screen.queryByRole('button', {name: 'Copy video link'}),
+    ).not.toBeInTheDocument();
+  });
+
   it('does not complete an upload after its transfer is aborted', async () => {
     const {fetcher} = setup();
     const controller = new AbortController();

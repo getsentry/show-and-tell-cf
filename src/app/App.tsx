@@ -801,6 +801,7 @@ function ShowAndTell({
                           <VideoPanel
                             submission={submission}
                             canManage={canManage}
+                            eventSlug={visibleSelection.event.slug}
                             initialFile={
                               queuedVideo?.submissionId === submission.id
                                 ? queuedVideo.file

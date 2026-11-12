@@ -574,14 +574,19 @@ export function SharePlaylist({
   eventId,
   kind = 'playlist',
   slug,
+  videoId,
 }: {
   eventId: string;
   slug?: string;
   kind?: 'playlist' | 'submission';
+  /** Links the screening straight to this video. */
+  videoId?: string;
 }) {
   const [message, setMessage] = useState('');
   const link = new URL(
-    kind === 'playlist' ? playlistPath(eventId, slug) : submissionPath(eventId, slug),
+    kind === 'playlist'
+      ? playlistPath(eventId, slug, videoId)
+      : submissionPath(eventId, slug),
     window.location.origin,
   ).href;
   async function copy() {
@@ -595,7 +600,11 @@ export function SharePlaylist({
   return (
     <div className="sharePlaylist">
       <button className="secondaryAction" onClick={() => void copy()}>
-        {kind === 'playlist' ? 'Copy screening link' : 'Copy submission link'}
+        {kind === 'submission'
+          ? 'Copy submission link'
+          : videoId
+            ? 'Copy video link'
+            : 'Copy screening link'}
       </button>
       <span role="status">{message}</span>
     </div>
