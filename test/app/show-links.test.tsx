@@ -5,6 +5,8 @@ import {App} from '../../src/app/App';
 import {
   eventSlug,
   eventIdFromPath,
+  linkedVideoId,
+  playlistPath,
   safeReturnTo,
   submissionPath,
 } from '../../src/shared/playlist';
@@ -25,8 +27,31 @@ it('normalizes slug labels and keeps identity independent of the label', () => {
     '/events/id/%2f',
     '/events/id/slug?next=evil',
     '/events/id/slug/extra',
+    '/events/id/slug?video=v',
+    '/playlists/id/slug?video=v&next=evil',
+    '/playlists/id/slug?video=../evil',
   ])
     expect(safeReturnTo(path)).toBe('/');
+});
+it('links to one video in a screening and keeps that link through sign-in', async () => {
+  expect(playlistPath('id', 'November!', 'v-6')).toBe('/playlists/id/november?video=v-6');
+  expect(playlistPath('id', undefined, null)).toBe('/playlists/id');
+  expect(linkedVideoId('?video=v-6')).toBe('v-6');
+  expect(linkedVideoId('?video=%2Fevil')).toBeNull();
+  expect(safeReturnTo('/playlists/id/november?video=v-6')).toBe(
+    '/playlists/id/november?video=v-6',
+  );
+  expect(eventIdFromPath('/playlists/id?video=v-6')).toBe('id');
+  window.history.replaceState(null, '', '/playlists/id/november?video=v-6');
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response('{}', {status: 401})),
+  );
+  render(<App />);
+  expect(await screen.findByRole('link', {name: 'Continue with Google'})).toHaveAttribute(
+    'href',
+    `/api/auth/login?returnTo=${encodeURIComponent('/playlists/id/november?video=v-6')}`,
+  );
 });
 it('preserves a nice submission URL through sign-in', async () => {
   window.history.replaceState(null, '', '/events/id/october-special');
