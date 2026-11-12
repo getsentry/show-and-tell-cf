@@ -14,6 +14,7 @@ import {
   createPlaylistController,
   formatDuration,
   PLAYBACK_RATES,
+  presenterCardVisible,
   screeningSeconds,
   type PlayerState,
   type PlaylistController,
@@ -264,6 +265,7 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
   const activeSlot = state.index % 2;
   const last = state.index === count - 1;
   const duration = state.durationSeconds || clip.durationSeconds;
+  const presenterVisible = presenterCardVisible(state.currentTime, duration);
   const toggle = () => void controller.current?.toggle();
   const next = () => void controller.current?.next();
 
@@ -293,7 +295,12 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
             />
           ))}
           {showingVideo ? (
-            <div className="clipOverlay" aria-live="polite" key={clip.videoId}>
+            <div
+              className={`clipOverlay${presenterVisible ? '' : ' clipOverlayHidden'}`}
+              aria-live="polite"
+              aria-hidden={!presenterVisible}
+              key={clip.videoId}
+            >
               <Avatar
                 name={clip.creatorName}
                 avatarUrl={clip.creatorAvatarUrl}

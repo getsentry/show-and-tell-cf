@@ -105,7 +105,7 @@ describe('playlist page', () => {
       {timeout: 3000},
     );
     expect(play).toHaveBeenCalledOnce();
-    // The presenter card stays on screen for the whole clip, including while paused.
+    // The presenter card shows as the clip starts, including while paused.
     const presenter = screen.getByText('Presenting').closest('.clipOverlay');
     expect(presenter).toHaveTextContent('Team');
     expect(presenter).toHaveTextContent('Demo a');

@@ -328,6 +328,17 @@ export function createPlaylistController(
 
 export type PlaylistController = ReturnType<typeof createPlaylistController>;
 
+/** The presenter card shows this long at the start and the end of each clip. */
+const PRESENTER_CARD_SECONDS = 15;
+
+/** Whether the presenter card shows at this point in a clip. */
+export function presenterCardVisible(currentTime: number, durationSeconds: number) {
+  return (
+    currentTime < PRESENTER_CARD_SECONDS ||
+    durationSeconds - currentTime <= PRESENTER_CARD_SECONDS
+  );
+}
+
 function finiteTime(value: number, fallback: number) {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
