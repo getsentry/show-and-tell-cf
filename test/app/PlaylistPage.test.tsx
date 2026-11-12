@@ -119,6 +119,8 @@ describe('playlist page', () => {
     expect(screen.getByRole('heading', {name: 'Demo b'})).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', {name: 'Finish'}));
     expect(screen.getByText('That’s a wrap')).toBeInTheDocument();
+    // The wrap card links the whole screening again, not the last clip.
+    await waitFor(() => expect(window.location.search).toBe(''));
     // The wrap card and the control bar both offer a replay.
     fireEvent.click(screen.getAllByRole('button', {name: 'Play again'})[0]);
     await waitFor(

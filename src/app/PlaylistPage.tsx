@@ -287,8 +287,12 @@ export function PlaylistPlayer({
   const toggle = () => void controller.current?.toggle();
   const next = () => void controller.current?.next();
 
-  // The address bar follows the selected clip so any video can be shared.
-  const linkedId = state.phase === 'idle' && state.index === 0 ? null : clip.videoId;
+  // The address bar follows the selected clip so any video can be shared. Before
+  // the first clip and after the wrap it points at the whole screening.
+  const linkedId =
+    state.phase === 'complete' || (state.phase === 'idle' && state.index === 0)
+      ? null
+      : clip.videoId;
   useEffect(() => {
     window.history.replaceState(
       window.history.state,
