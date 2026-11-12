@@ -23,13 +23,14 @@ import {GoogleIcon} from './components/GoogleIcon';
 import {Loader} from './components/Loader';
 import {SentrySymbol} from './components/SentrySymbol';
 import {ThemeToggle} from './components/ThemeToggle';
+import {VideoFilePicker} from './components/VideoFilePicker';
 import {PlaylistOrder} from './PlaylistOrder';
 import {PlaylistTrash} from './PlaylistTrash';
 import {PlaylistEditor} from './PlaylistEditor';
 import {ReminderList} from './ReminderList';
 import {PlaylistPage, SharePlaylist} from './PlaylistPage';
 import {VideoPanel} from './VideoPanel';
-import {validateVideo, VIDEO_ACCEPT} from './video-upload';
+import {validateVideo} from './video-upload';
 
 export function App() {
   const [user, setUser] = useState<SessionUser | null | undefined>();
@@ -942,36 +943,27 @@ function SubmissionForm({
           disabled={busy}
         />
       </label>
-      <label className="filePicker" htmlFor="submission-video">
-        <span className="filePickerIcon">
-          <ArrowIcon direction="up" />
-        </span>
-        Video
-        <input
-          id="submission-video"
-          name="video"
-          type="file"
-          accept={VIDEO_ACCEPT}
-          disabled={busy}
-          aria-describedby="submission-video-hint"
-          onChange={(event) => {
-            const next = event.currentTarget.files?.[0] ?? null;
-            setVideoError(null);
-            setVideo(null);
-            if (!next) return;
-            try {
-              validateVideo(next);
-              setVideo(next);
-            } catch (cause) {
-              event.currentTarget.value = '';
-              setVideoError(cause instanceof Error ? cause.message : String(cause));
-            }
-          }}
-        />
-      </label>
+      <VideoFilePicker
+        id="submission-video"
+        label="Video"
+        disabled={busy}
+        describedBy="submission-video-hint"
+        onSelect={(next, input) => {
+          setVideoError(null);
+          setVideo(null);
+          if (!next) return;
+          try {
+            validateVideo(next);
+            setVideo(next);
+          } catch (cause) {
+            input.value = '';
+            setVideoError(cause instanceof Error ? cause.message : String(cause));
+          }
+        }}
+      />
       <p id="submission-video-hint" className="formHint">
-        Up to 5 GiB · 10 minutes maximum · MP4, MOV, WebM and other video formats. You can
-        also add it later from your card.
+        Drop a video on the box or choose one. Up to 5 GiB · 10 minutes maximum · MP4,
+        MOV, WebM and other video formats. You can also add it later from your card.
       </p>
       {videoError ? (
         <div className="inlineError" role="alert">

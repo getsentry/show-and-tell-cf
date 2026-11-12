@@ -12,6 +12,7 @@ import type {
 import {api, errorMessage, json} from './api';
 import {ConfirmDialog} from './components/ConfirmDialog';
 import {ArrowIcon} from './components/ArrowIcon';
+import {VideoFilePicker} from './components/VideoFilePicker';
 import {
   checkRememberedFile,
   forgetFile,
@@ -20,7 +21,6 @@ import {
   uploadParts,
   uploadPath,
   validateVideo,
-  VIDEO_ACCEPT,
 } from './video-upload';
 
 type Operation = 'uploading' | 'completing' | 'updating' | null;
@@ -466,24 +466,18 @@ export function VideoPanel({
             </p>
           ) : null}
           {!allPartsUploaded && !expired ? (
-            <label className="filePicker" htmlFor={id}>
-              <span className="filePickerIcon">
-                <ArrowIcon direction="up" />
-              </span>
-              {upload ? 'Select original video' : 'Choose video'}
-              <input
-                key={inputKey}
-                id={id}
-                type="file"
-                accept={VIDEO_ACCEPT}
-                disabled={busy || !!loadError}
-                onChange={(event) => chooseFile(event.currentTarget.files?.[0])}
-                aria-describedby={`${id}-hint`}
-              />
-            </label>
+            <VideoFilePicker
+              key={inputKey}
+              id={id}
+              label={upload ? 'Select original video' : 'Choose video'}
+              disabled={busy || !!loadError}
+              describedBy={`${id}-hint`}
+              onSelect={chooseFile}
+            />
           ) : null}
           <p id={`${id}-hint`} className="formHint">
-            Up to 5 GiB · 10 minutes maximum · MP4, MOV, WebM and other video formats.
+            Drop a video on the box or choose one. Up to 5 GiB · 10 minutes maximum · MP4,
+            MOV, WebM and other video formats.
           </p>
           {operation === 'uploading' || operation === 'completing' ? (
             <div className="uploadProgress" role="status">
