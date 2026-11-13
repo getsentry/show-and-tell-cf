@@ -1836,7 +1836,7 @@ body:has(.screeningShell.pageFullscreen) {
   opacity: 0.06;
   transform: rotate(-8deg);
 }
-/* Permanent presenter card so the room always knows who is on screen. */
+/* Presenter card so the room knows who is on screen as a clip starts and wraps up. */
 .clipOverlay {
   position: absolute;
   z-index: 1;
@@ -1855,6 +1855,13 @@ body:has(.screeningShell.pageFullscreen) {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(10px);
   animation: clipOverlayIn 400ms ease backwards;
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
+}
+.clipOverlay.clipOverlayHidden {
+  opacity: 0;
+  transform: translateY(0.5rem);
 }
 .clipOverlay .clipOverlayAvatar {
   width: 2.6em;
@@ -1894,7 +1901,10 @@ body:has(.screeningShell.pageFullscreen) {
   left: 1.5rem;
   max-width: min(36rem, calc(100% - 3rem));
   font-size: clamp(1rem, 0.55rem + 0.75vw, 1.5rem);
-  transition: bottom 250ms ease;
+  transition:
+    bottom 250ms ease,
+    opacity 400ms ease,
+    transform 400ms ease;
 }
 .screeningShell.fullscreen.idle .clipOverlay {
   bottom: 1.5rem;

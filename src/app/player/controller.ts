@@ -25,6 +25,8 @@ export interface PlayerState {
 export interface PlayerOptions {
   /** Title-card interlude before each clip. Zero starts the clip immediately. */
   titleDurationMs?: number;
+  /** Clip that the first play starts from, e.g. from a shared video link. */
+  startIndex?: number;
 }
 
 /** Title-card interlude shown before every clip, as in Hack Week's reel. */
@@ -44,16 +46,7 @@ export function createPlaylistController(
   options: PlayerOptions = {},
 ) {
   const titleDurationMs = options.titleDurationMs ?? TITLE_CARD_DURATION_MS;
-  let state: PlayerState = {
-    index: 0,
-    phase: 'idle',
-    error: null,
-    countdownSeconds: null,
-    currentTime: 0,
-    durationSeconds: items[0]?.durationSeconds ?? 0,
-    muted: false,
-    playbackRate: 1,
-  };
+  let state = initialPlayerState(items, options.startIndex);
   let generation = 0;
   let destroyed = false;
   let titleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -327,6 +320,31 @@ export function createPlaylistController(
 }
 
 export type PlaylistController = ReturnType<typeof createPlaylistController>;
+
+export function initialPlayerState(items: PlaylistItem[], startIndex = 0): PlayerState {
+  const index = items[startIndex] ? startIndex : 0;
+  return {
+    index,
+    phase: 'idle',
+    error: null,
+    countdownSeconds: null,
+    currentTime: 0,
+    durationSeconds: items[index]?.durationSeconds ?? 0,
+    muted: false,
+    playbackRate: 1,
+  };
+}
+
+/** The presenter card shows this long at the start and the end of each clip. */
+const PRESENTER_CARD_SECONDS = 15;
+
+/** Whether the presenter card shows at this point in a clip. */
+export function presenterCardVisible(currentTime: number, durationSeconds: number) {
+  return (
+    currentTime < PRESENTER_CARD_SECONDS ||
+    durationSeconds - currentTime <= PRESENTER_CARD_SECONDS
+  );
+}
 
 function finiteTime(value: number, fallback: number) {
   return Number.isFinite(value) && value >= 0 ? value : fallback;

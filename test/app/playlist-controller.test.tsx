@@ -1,6 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   createPlaylistController,
+  presenterCardVisible,
   type PlayerState,
 } from '../../src/app/player/controller';
 import type {PlaylistItem} from '../../src/shared/playlist';
@@ -384,5 +385,21 @@ describe('title cards and playback controls', () => {
       muted: true,
       currentTime: 0,
     });
+  });
+});
+
+describe('presenter card timing', () => {
+  it('shows only in the first and last 15 seconds of a clip', () => {
+    expect(presenterCardVisible(0, 120)).toBe(true);
+    expect(presenterCardVisible(14.9, 120)).toBe(true);
+    expect(presenterCardVisible(15, 120)).toBe(false);
+    expect(presenterCardVisible(60, 120)).toBe(false);
+    expect(presenterCardVisible(104.9, 120)).toBe(false);
+    expect(presenterCardVisible(105, 120)).toBe(true);
+    expect(presenterCardVisible(120, 120)).toBe(true);
+  });
+  it('stays on for the whole of a clip under 30 seconds', () => {
+    for (const time of [0, 10, 15, 20, 25])
+      expect(presenterCardVisible(time, 25)).toBe(true);
   });
 });

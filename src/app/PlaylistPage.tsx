@@ -1,8 +1,8 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {SessionUser} from '../shared/api';
-import type {PlaylistItem, PlaylistResponse} from '../shared/playlist';
-import {playlistPath, submissionPath} from '../shared/playlist';
+import type {PlaylistResponse} from '../shared/playlist';
+import {linkedVideoId, playlistPath, submissionPath} from '../shared/playlist';
 import type {PlaybackResponse} from '../shared/videos';
 import {api, errorMessage} from './api';
 import {AppFrame} from './components/AppFrame';
@@ -13,7 +13,9 @@ import {SentrySymbol} from './components/SentrySymbol';
 import {
   createPlaylistController,
   formatDuration,
+  initialPlayerState,
   PLAYBACK_RATES,
+  presenterCardVisible,
   screeningSeconds,
   type PlayerState,
   type PlaylistController,
@@ -46,7 +48,15 @@ export function PlaylistPage({
       .then((result) => {
         if (!controller.signal.aborted) {
           setData(result);
-          window.history.replaceState(null, '', playlistPath(eventId, result.event.slug));
+          window.history.replaceState(
+            null,
+            '',
+            playlistPath(
+              eventId,
+              result.event.slug,
+              linkedVideoId(window.location.search),
+            ),
+          );
         }
       })
       .catch((cause: unknown) => {
@@ -89,7 +99,11 @@ export function PlaylistPage({
               </div>
             </header>
             {data.items.length ? (
-              <PlaylistPlayer key={`${eventId}-${revision}`} data={data} />
+              <PlaylistPlayer
+                key={`${eventId}-${revision}`}
+                data={data}
+                initialVideoId={linkedVideoId(window.location.search)}
+              />
             ) : (
               <section className="emptyState">
                 <span aria-hidden="true">0</span>
@@ -113,25 +127,29 @@ export function PlaylistPage({
   );
 }
 
-const initialState = (items: PlaylistItem[]): PlayerState => ({
-  index: 0,
-  phase: 'idle',
-  error: null,
-  countdownSeconds: null,
-  currentTime: 0,
-  durationSeconds: items[0]?.durationSeconds ?? 0,
-  muted: false,
-  playbackRate: 1,
-});
-
-export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
+export function PlaylistPlayer({
+  data,
+  initialVideoId = null,
+}: {
+  data: PlaylistResponse;
+  /** Video a shared link points at; the first play starts there. */
+  initialVideoId?: string | null;
+}) {
   const first = useRef<HTMLVideoElement>(null);
   const second = useRef<HTMLVideoElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   const controls = useRef<HTMLDivElement>(null);
   const controller = useRef<PlaylistController | null>(null);
   const idleTimer = useRef<number | null>(null);
-  const [state, setState] = useState<PlayerState>(() => initialState(data.items));
+  const [startIndex] = useState(() =>
+    Math.max(
+      0,
+      data.items.findIndex((item) => item.videoId === initialVideoId),
+    ),
+  );
+  const [state, setState] = useState<PlayerState>(() =>
+    initialPlayerState(data.items, startIndex),
+  );
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
   // iPhone Safari can only fullscreen a <video>, which would drop the overlays and
   // break on the slot swap between clips, so the shell fills the viewport instead.
@@ -152,13 +170,14 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
           `/events/${encodeURIComponent(data.event.id)}/playlist/${encodeURIComponent(id)}/playback`,
         ),
       setState,
+      {startIndex},
     );
     controller.current = player;
     return () => {
       player.destroy();
       controller.current = null;
     };
-  }, [data.items, data.event.id]);
+  }, [data.items, data.event.id, startIndex]);
 
   useEffect(() => {
     const sync = () => setNativeFullscreen(document.fullscreenElement === shell.current);
@@ -264,8 +283,23 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
   const activeSlot = state.index % 2;
   const last = state.index === count - 1;
   const duration = state.durationSeconds || clip.durationSeconds;
+  const presenterVisible = presenterCardVisible(state.currentTime, duration);
   const toggle = () => void controller.current?.toggle();
   const next = () => void controller.current?.next();
+
+  // The address bar follows the selected clip so any video can be shared. Before
+  // the first clip and after the wrap it points at the whole screening.
+  const linkedId =
+    state.phase === 'complete' || (state.phase === 'idle' && state.index === 0)
+      ? null
+      : clip.videoId;
+  useEffect(() => {
+    window.history.replaceState(
+      window.history.state,
+      '',
+      playlistPath(data.event.id, data.event.slug, linkedId),
+    );
+  }, [data.event.id, data.event.slug, linkedId]);
 
   return (
     <section className="screening" aria-label="Screening player">
@@ -293,7 +327,12 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
             />
           ))}
           {showingVideo ? (
-            <div className="clipOverlay" aria-live="polite" key={clip.videoId}>
+            <div
+              className={`clipOverlay${presenterVisible ? '' : ' clipOverlayHidden'}`}
+              aria-live="polite"
+              aria-hidden={!presenterVisible}
+              key={clip.videoId}
+            >
               <Avatar
                 name={clip.creatorName}
                 avatarUrl={clip.creatorAvatarUrl}
@@ -319,8 +358,15 @@ export function PlaylistPlayer({data}: {data: PlaylistResponse}) {
                   {countLabel(count)} · {formatDuration(screeningSeconds(data.items))}{' '}
                   with intros
                 </p>
+                {state.index > 0 ? (
+                  <p>
+                    Starting with video {pad(state.index + 1)}: {clip.title}
+                  </p>
+                ) : null}
                 <button className="screeningStart" onClick={toggle}>
-                  Play all
+                  {state.index > 0
+                    ? `Play from video ${pad(state.index + 1)}`
+                    : 'Play all'}
                 </button>
                 <small>Sound starts after you press play</small>
               </div>
@@ -539,14 +585,19 @@ export function SharePlaylist({
   eventId,
   kind = 'playlist',
   slug,
+  videoId,
 }: {
   eventId: string;
   slug?: string;
   kind?: 'playlist' | 'submission';
+  /** Links the screening straight to this video. */
+  videoId?: string;
 }) {
   const [message, setMessage] = useState('');
   const link = new URL(
-    kind === 'playlist' ? playlistPath(eventId, slug) : submissionPath(eventId, slug),
+    kind === 'playlist'
+      ? playlistPath(eventId, slug, videoId)
+      : submissionPath(eventId, slug),
     window.location.origin,
   ).href;
   async function copy() {
@@ -560,7 +611,11 @@ export function SharePlaylist({
   return (
     <div className="sharePlaylist">
       <button className="secondaryAction" onClick={() => void copy()}>
-        {kind === 'playlist' ? 'Copy screening link' : 'Copy submission link'}
+        {kind === 'submission'
+          ? 'Copy submission link'
+          : videoId
+            ? 'Copy video link'
+            : 'Copy screening link'}
       </button>
       <span role="status">{message}</span>
     </div>

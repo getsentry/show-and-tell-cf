@@ -13,6 +13,9 @@ export interface PlaylistResponse {
   items: PlaylistItem[];
 }
 
+const ID = '[a-zA-Z0-9_-]{1,128}';
+const SLUG = '(?:/[a-z0-9]+(?:-[a-z0-9]+)*)?';
+
 export function eventSlug(value: string) {
   return (
     value
@@ -26,8 +29,16 @@ export function eventSlug(value: string) {
   );
 }
 
-export function playlistPath(eventId: string, slug?: string) {
-  return `/playlists/${encodeURIComponent(eventId)}${slug ? `/${eventSlug(slug)}` : ''}`;
+/** A screening link, optionally pointing at one video in its lineup. */
+export function playlistPath(eventId: string, slug?: string, videoId?: string | null) {
+  const path = `/playlists/${encodeURIComponent(eventId)}${slug ? `/${eventSlug(slug)}` : ''}`;
+  return videoId ? `${path}?video=${encodeURIComponent(videoId)}` : path;
+}
+
+/** The video a screening link points at, if its id is well formed. */
+export function linkedVideoId(search: string) {
+  const id = new URLSearchParams(search).get('video');
+  return id && new RegExp(`^${ID}$`).test(id) ? id : null;
 }
 
 export function submissionPath(eventId: string, slug?: string) {
@@ -35,16 +46,15 @@ export function submissionPath(eventId: string, slug?: string) {
 }
 
 export function eventIdFromPath(path: string) {
-  return safeReturnTo(path) === '/' ? null : path.split('/')[2];
+  return safeReturnTo(path) === '/' ? null : path.split(/[/?]/)[2];
 }
 
-/** Only known local player and submission routes may be used as OAuth return destinations. */
+const RETURN_TO = new RegExp(
+  `^/(?:events/${ID}${SLUG}|playlists/${ID}${SLUG}(?:\\?video=${ID})?)$`,
+);
+
+/** Only known local player and submission routes may be used as OAuth return
+ * destinations. Screening links may also point at one video. */
 export function safeReturnTo(value: string | undefined) {
-  return value &&
-    value.length <= 220 &&
-    /^\/(?:playlists|events)\/[a-zA-Z0-9_-]{1,128}(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(
-      value,
-    )
-    ? value
-    : '/';
+  return value && value.length <= 360 && RETURN_TO.test(value) ? value : '/';
 }
