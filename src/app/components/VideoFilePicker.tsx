@@ -40,8 +40,9 @@ export function VideoFilePicker({
     if (!hasFiles(event)) return;
     event.preventDefault();
     setDragging(false);
-    if (disabled || !input.current) return;
     const {files} = event.dataTransfer;
+    // An empty drop (e.g. from a source that exposes no files) keeps the current pick.
+    if (disabled || !input.current || !files.length) return;
     // Keep the native input showing the dropped file's name.
     if (files instanceof FileList) input.current.files = files;
     onSelect(files[0], input.current);

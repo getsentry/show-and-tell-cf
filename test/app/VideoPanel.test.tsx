@@ -168,6 +168,17 @@ describe('video uploads', () => {
     );
   });
 
+  it('keeps the picked video when a drop carries no files', async () => {
+    setup();
+    render(<VideoPanel submission={submission} canManage />);
+    const input = await screen.findByLabelText('Choose video');
+    fireEvent.change(input, {target: {files: [file()]}});
+    fireEvent.drop(input.closest('label')!, {
+      dataTransfer: {types: ['Files'], files: []},
+    });
+    expect(screen.getByRole('button', {name: 'Upload video'})).toBeEnabled();
+  });
+
   it('rejects a dropped file that is not a video', async () => {
     setup();
     render(<VideoPanel submission={submission} canManage />);
