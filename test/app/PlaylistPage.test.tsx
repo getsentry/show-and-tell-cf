@@ -119,6 +119,8 @@ describe('playlist page', () => {
     expect(screen.getByRole('heading', {name: 'Demo b'})).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', {name: 'Finish'}));
     expect(screen.getByText('That’s a wrap')).toBeInTheDocument();
+    // The wrap card links the whole screening again, not the last clip.
+    await waitFor(() => expect(window.location.search).toBe(''));
     // The wrap card and the control bar both offer a replay.
     fireEvent.click(screen.getAllByRole('button', {name: 'Play again'})[0]);
     await waitFor(
@@ -126,6 +128,40 @@ describe('playlist page', () => {
       {timeout: 3000},
     );
     expect(screen.getByRole('heading', {name: 'Demo a'})).toBeInTheDocument();
+  });
+  it('opens a shared video link on that video and keeps the URL on the selected clip', async () => {
+    window.history.replaceState(null, '', '/playlists/event?video=b');
+    const fetch = vi.fn(async (url: string) =>
+      url === '/api/events/event/playlist'
+        ? response(playlist)
+        : response({source: {kind: 'mp4', url: '/content'}, expiresAt: null}),
+    );
+    vi.stubGlobal('fetch', fetch);
+    render(<PlaylistPage eventId="event" user={viewer} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Play from video 02'}));
+    expect(window.location.search).toBe('?video=b');
+    await waitFor(
+      () => expect(screen.getByRole('button', {name: 'Start now'})).toBeEnabled(),
+      {timeout: 3000},
+    );
+    expect(screen.getByRole('heading', {name: 'Demo b'})).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/events/event/playlist/b/playback',
+      undefined,
+    );
+    fireEvent.click(screen.getByRole('button', {name: /Demo a/}));
+    await waitFor(() => expect(window.location.search).toBe('?video=a'));
+    expect(window.location.pathname).toBe('/playlists/event');
+  });
+  it('ignores a video link that is not in the lineup', async () => {
+    window.history.replaceState(null, '', '/playlists/event?video=gone');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response(playlist)),
+    );
+    render(<PlaylistPage eventId="event" user={viewer} />);
+    expect(await screen.findByRole('button', {name: 'Play all'})).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(''));
   });
   it('skips the countdown, mutes, and steps through clips with keyboard shortcuts', async () => {
     window.history.replaceState(null, '', '/playlists/event');

@@ -801,6 +801,7 @@ function ShowAndTell({
                           <VideoPanel
                             submission={submission}
                             canManage={canManage}
+                            eventSlug={visibleSelection.event.slug}
                             initialFile={
                               queuedVideo?.submissionId === submission.id
                                 ? queuedVideo.file
@@ -998,12 +999,10 @@ function Loading() {
 
 function SignIn({authError}: {authError: string | null}) {
   const eventId = currentEventId();
-  const returnTo =
-    safeReturnTo(window.location.pathname) !== '/'
-      ? safeReturnTo(window.location.pathname)
-      : eventId
-        ? submissionPath(eventId)
-        : '/';
+  // A link to one screening video keeps its ?video= through sign-in.
+  const here = safeReturnTo(window.location.pathname + window.location.search);
+  const path = here !== '/' ? here : safeReturnTo(window.location.pathname);
+  const returnTo = path !== '/' ? path : eventId ? submissionPath(eventId) : '/';
   return (
     <main className="authShell">
       <ThemeToggle className="authThemeToggle" />
