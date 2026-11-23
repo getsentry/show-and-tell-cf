@@ -152,6 +152,49 @@ describe('video uploads', () => {
     ).toBeInTheDocument();
   });
 
+  it('accepts a video dropped onto the picker', async () => {
+    const {fetcher} = setup();
+    render(<VideoPanel submission={submission} canManage />);
+    const picker = (await screen.findByLabelText('Choose video')).closest('label')!;
+    const dataTransfer = {types: ['Files'], files: [file()], dropEffect: 'none'};
+    fireEvent.dragEnter(picker, {dataTransfer});
+    expect(picker).toHaveClass('filePicker--dragging');
+    fireEvent.drop(picker, {dataTransfer});
+    expect(picker).not.toHaveClass('filePicker--dragging');
+    fireEvent.click(screen.getByRole('button', {name: 'Upload video'}));
+    expect(await screen.findByText('Queued for processing')).toBeInTheDocument();
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/complete'))).toHaveLength(
+      1,
+    );
+  });
+
+  it('keeps the picked video when a drop carries no files', async () => {
+    setup();
+    render(<VideoPanel submission={submission} canManage />);
+    const input = await screen.findByLabelText('Choose video');
+    fireEvent.change(input, {target: {files: [file()]}});
+    fireEvent.drop(input.closest('label')!, {
+      dataTransfer: {types: ['Files'], files: []},
+    });
+    expect(screen.getByRole('button', {name: 'Upload video'})).toBeEnabled();
+  });
+
+  it('rejects a dropped file that is not a video', async () => {
+    setup();
+    render(<VideoPanel submission={submission} canManage />);
+    const picker = (await screen.findByLabelText('Choose video')).closest('label')!;
+    fireEvent.drop(picker, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [new File(['notes'], 'notes.txt', {type: 'text/plain'})],
+      },
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Choose a video file, such as MP4, MOV, or WebM.',
+    );
+    expect(screen.getByRole('button', {name: 'Upload video'})).toBeDisabled();
+  });
+
   it('starts the upload handed over from the create form exactly once', async () => {
     const {fetcher} = setup();
     const taken = vi.fn();

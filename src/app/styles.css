@@ -1594,9 +1594,13 @@ textarea::placeholder {
     border-color 100ms ease,
     background 100ms ease;
 }
-.filePicker:hover {
+.filePicker:hover,
+.filePicker--dragging {
   border-color: var(--blurple);
   background: var(--surface-tint-hover);
+}
+.filePicker--dragging {
+  border-style: solid;
 }
 .filePickerIcon {
   display: grid;

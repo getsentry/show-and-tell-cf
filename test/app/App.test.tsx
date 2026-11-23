@@ -1126,6 +1126,28 @@ describe('App', () => {
     expect(screen.getByRole('button', {name: 'Create submission'})).toBeEnabled();
   });
 
+  it('accepts a video dropped onto the create form picker', async () => {
+    const fetcher = vi.fn((url: string) => {
+      if (url === '/api/session') return Promise.resolve(jsonResponse({user: admin}));
+      if (url === '/api/events')
+        return Promise.resolve(jsonResponse({events: [october]}));
+      if (url === '/api/events/october')
+        return Promise.resolve(jsonResponse(detailFor(october)));
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    window.history.replaceState(null, '', '/events/october');
+    render(<App />);
+    await screen.findByRole('form', {name: 'Create submission'});
+    fireEvent.drop(screen.getByLabelText('Video').closest('label')!, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [new File(['abcdef'], 'demo.mp4', {type: 'video/mp4'})],
+      },
+    });
+    expect(screen.getByRole('button', {name: 'Submit and upload'})).toBeEnabled();
+  });
+
   it('creates a title-only submission once while the request is pending', async () => {
     const pending = deferred<Response>();
     const fetcher = vi.fn((url: string, init?: RequestInit) => {
